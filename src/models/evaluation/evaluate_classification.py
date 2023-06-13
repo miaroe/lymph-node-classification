@@ -19,7 +19,7 @@ def evaluate_model(trainer, reports_path, conf_matrix, model_layout):
     '''
     # plot confusion matrix and save classification report to src/reports
     if conf_matrix:
-        confusion_matrix_and_report(trainer.model, trainer.batch_size, batch_generator, reports_path)
+        confusion_matrix_and_report(trainer, batch_generator, reports_path)
 
     # plot model layout and save to src/reports/figures
     if model_layout:

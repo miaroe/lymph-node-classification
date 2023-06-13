@@ -3,7 +3,7 @@ import logging
 
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, CSVLogger
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.metrics import Precision, Recall
+from tensorflow.python.keras.metrics import Precision, Recall
 
 from src.resources.ml_models import get_arch
 from src.data.classification_pipeline import EBUSClassificationPipeline
@@ -153,4 +153,4 @@ class BaselineTrainer:
 
         # use pre-trained model by changing the model_name to wanted model
         else:
-            self.model_name = 'EBUSClassification_Stations_-10_2023-06-12-143330_Epochs-10_ImageSize-256_BatchSize-32_Augmentation-False_ValPercent-20'
+            self.model_name = 'EBUSClassification-inception_Stations-10_2023-06-13-095800_Epochs-10_ImageSize-256_BatchSize-32_Augmentation-False_ValPercent-20'
