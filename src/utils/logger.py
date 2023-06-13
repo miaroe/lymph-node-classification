@@ -1,7 +1,7 @@
 from os import makedirs, path
 import logging
 from logging.handlers import RotatingFileHandler
-from src.resources.config import logfile_path
+from src.resources.config import logfile_path, local_logfile_path
 
 MAX_LOGSIZE_MEGABYTE = 10   # Max size of logfile before a new is created
 LOGFILE_BACKUPCOUNT = 10     # Number of logfiles created before overwriting
@@ -14,7 +14,7 @@ def init_logger(logger_name="default_logger"):
 
     base_logger = create_base_logger()
 
-    filehandler = create_filehandler(logger_name, logfile_path=logfile_path)
+    filehandler = create_filehandler(logger_name, logfile_path=logfile_path) #change to logfile_path
     base_logger.addHandler(filehandler)
 
     consolehandler = create_consolehandler(level=log_level)

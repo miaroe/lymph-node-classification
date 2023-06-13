@@ -36,17 +36,7 @@ class ClassificationToText(fast.PythonProcessObject):
 class ImageClassificationWindow(object):
     is_running = False
 
-    station_labels = {
-        'other': 0,
-        '4L': 1,
-        '4R': 2,
-        '7L': 3,
-        '7R': 4,
-        '10L': 5,
-        '10R': 6,
-    }
-
-    def __init__(self, data_path, model_path, model_name, sequence_size=5, framerate=-1):
+    def __init__(self, station_labels, data_path, model_path, model_name, sequence_size=5, framerate=-1):
 
         # Setup a FAST pipeline
         self.streamer = fast.ImageFileStreamer.create(os.path.join(data_path, 'frame_#.png'), loop=True, framerate=framerate)
@@ -56,7 +46,7 @@ class ImageClassificationWindow(object):
         self.classification_model.connect(0, self.streamer)
 
         # Classification (neural network output) to Text
-        self.station_classification_to_text = ClassificationToText.create(name='Station', labels=self.station_labels)
+        self.station_classification_to_text = ClassificationToText.create(name='Station', labels=station_labels)
         self.station_classification_to_text.connect(0, self.classification_model, 0)
 
         # Renderers
@@ -85,9 +75,10 @@ class ImageClassificationWindow(object):
         self.window.run()
 
 
-def run_nn_image_classification(data_path, model_path, model_name, sequence_size, framerate):
+def run_nn_image_classification(station_labels, data_path, model_path, model_name, sequence_size, framerate):
 
     fast_classification = ImageClassificationWindow(
+            station_labels=station_labels,
             data_path=data_path,
             model_path=model_path,
             model_name=model_name,
@@ -98,7 +89,8 @@ def run_nn_image_classification(data_path, model_path, model_name, sequence_size
     fast_classification.window.run()
 
 
-run_nn_image_classification(data_path=local_data_path,
+run_nn_image_classification(station_labels=set_stations_config(station_config_nr),
+                            data_path=local_data_path,
                             model_path=local_model_path,
                             model_name=local_model_name,
                             sequence_size=2,

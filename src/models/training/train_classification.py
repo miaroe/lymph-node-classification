@@ -3,21 +3,21 @@ import logging
 
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, CSVLogger
 from tensorflow.keras.optimizers import Adam
-from tensorflow.python.keras.metrics import Precision, Recall
+from tensorflow.keras.metrics import Precision, Recall
 
 from src.resources.ml_models import get_arch
 from src.data.classification_pipeline import EBUSClassificationPipeline
 
 logger = logging.getLogger()
 def train_model(perform_training, data_path, image_shape, tf_dataset, validation_split,
-                batch_size, split_by, samples_per_load, label_config, augment_data, model_arch,
-                instance_size, learning_rate, save_model_path, history_path, model_name, patience,
+                batch_size, split_by, samples_per_load, station_config_nr, augment_data, model_arch,
+                instance_size, learning_rate, model_path, history_path, model_name, patience,
                 epochs):
 
     print("Trainer: " + model_arch)
-    trainer = BaselineTrainer(data_path, image_shape, tf_dataset, validation_split, batch_size,
-                                split_by, samples_per_load, label_config, augment_data, model_arch,
-                                instance_size, learning_rate, save_model_path, history_path,
+    trainer = BaselineTrainer(perform_training, data_path, image_shape, tf_dataset, validation_split, batch_size,
+                                split_by, samples_per_load, station_config_nr, augment_data, model_arch,
+                                instance_size, learning_rate, model_path, history_path,
                                 model_name, patience, epochs)
 
     # Perform training
@@ -27,6 +27,7 @@ def train_model(perform_training, data_path, image_shape, tf_dataset, validation
 class BaselineTrainer:
 
     def __init__(self,
+                 perform_training: bool,
                  data_path: str,
                  image_shape: tuple,
                  tf_dataset: bool,
@@ -34,18 +35,18 @@ class BaselineTrainer:
                  batch_size: int,
                  split_by: str,
                  samples_per_load: int,
-                 label_config: int,
+                 station_config_nr: int,
                  augment_data: bool,
                  model_arch: str,
                  instance_size: tuple,
                  learning_rate: float,
-                 save_model_path: str,
+                 model_path: str,
                  history_path: str,
                  model_name: str,
                  patience: int,
                  epochs: int
                  ):
-
+        self.perform_training = perform_training
         self.data_path = data_path
         self.image_shape = image_shape
         self.tf_dataset = tf_dataset
@@ -53,12 +54,12 @@ class BaselineTrainer:
         self.batch_size = batch_size
         self.split_by = split_by
         self.samples_per_load = samples_per_load
-        self.label_config = label_config
+        self.station_config_nr = station_config_nr
         self.augment_data = augment_data
         self.model_arch = model_arch
         self.instance_size = instance_size
         self.learning_rate = learning_rate
-        self.save_model_path = save_model_path
+        self.model_path = model_path
         self.history_path = history_path
         self.model_name = model_name
         self.patience = patience
@@ -81,7 +82,7 @@ class BaselineTrainer:
                                    batch_size=self.batch_size,
                                    split_by=self.split_by,
                                    samples_per_load=self.samples_per_load,
-                                   label_config_nbr=self.label_config,
+                                   station_config_nbr=self.station_config_nr,
                                    )
         if self.augment_data:
             self.pipeline.data_augmentor.add_rotation(max_angle=30)
@@ -96,14 +97,16 @@ class BaselineTrainer:
 
         '''
         self.generator = self.pipeline.generator_containers[0]
-        print('Training subjects', self.generator.training.get_subjects())
-        print('Validation subjects', self.generator.validation.get_subjects())
+        if self.perform_training:
+            print('Training subjects', self.generator.training.get_subjects())
+            print('Validation subjects', self.generator.validation.get_subjects())
 
     # -----------------------------  BUILDING AND SAVING MODEL ----------------------------------
 
     def build_model(self):
         self.model = get_arch(self.model_arch, self.instance_size, self.pipeline.get_num_stations())
-        print(self.model.summary())
+        if self.perform_training:
+            print(self.model.summary())
 
         self.model.compile(
             optimizer=Adam(self.learning_rate),
@@ -111,10 +114,10 @@ class BaselineTrainer:
             metrics=['accuracy', Precision(), Recall()],
         )
     def save_model(self):
-        os.makedirs(self.save_model_path, exist_ok=True)
+        os.makedirs(self.model_path, exist_ok=True)
         os.makedirs(self.history_path, exist_ok=True)
 
-        model_checkpoint_path = os.path.join(self.save_model_path, self.model_name + ".h5")
+        model_checkpoint_path = os.path.join(self.model_path, self.model_name)
 
         save_best = ModelCheckpoint(filepath=model_checkpoint_path,
                                     monitor='val_loss',
@@ -150,4 +153,4 @@ class BaselineTrainer:
 
         # use pre-trained model by changing the model_name to wanted model
         else:
-            self.model_name = 'EBUSClassification_Stations-7_2023-06-07-093431_Epochs-1_ImageSize-256_BatchSize-32_Augmentation-False_ValPercent-20'
+            self.model_name = 'EBUSClassification_Stations_-10_2023-06-12-143330_Epochs-10_ImageSize-256_BatchSize-32_Augmentation-False_ValPercent-20'
