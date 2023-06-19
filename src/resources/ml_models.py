@@ -1,7 +1,9 @@
 import tensorflow as tf
+from mlmia.architectures import CVCNet
 from tensorflow.keras.applications import InceptionV3
 from tensorflow.keras.applications import ResNet50
 from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.applications import VGG16
 from tensorflow.keras.layers import Input, Dense, Conv2D, MaxPooling2D, Dropout, Flatten, SpatialDropout2D, \
     ZeroPadding2D, Activation, AveragePooling2D, UpSampling2D, BatchNormalization, ConvLSTM2D, \
     TimeDistributed, Concatenate, Lambda, Reshape, LSTM
@@ -36,6 +38,7 @@ def get_arch(model_name, instance_size, num_classes):
         # InceptionV3 (typical example arch) - personal preference for CNN classification (however, quite expensive and might be overkill in a lot of scenarios)
         some_input = Input(shape=instance_size)
         base_model = InceptionV3(include_top=False, weights="imagenet", pooling=None, input_tensor=some_input)
+        base_model.trainable = False
         x = base_model.output
         x = Flatten()(x)
         x = Dense(64)(x)
@@ -49,6 +52,7 @@ def get_arch(model_name, instance_size, num_classes):
         # ResNet-50, another very popular arch, can be done similarly as for InceptionV3 above
         some_input = Input(shape=instance_size)
         base_model = ResNet50(include_top=False, weights="imagenet", pooling=None, input_tensor=some_input)
+        base_model.trainable = False
         x = base_model.output
         x = Flatten()(x)
         x = Dense(64)(x)
@@ -63,6 +67,7 @@ def get_arch(model_name, instance_size, num_classes):
         # normal tissue from breast cancer tissue, as well as separating different types of breast cancer tissue
         some_input = Input(shape=instance_size)
         base_model = InceptionV3(include_top=False, weights="imagenet", pooling=None, input_tensor=some_input)
+        base_model.trainable = False
         x = base_model.output
         x = Flatten()(x)
 
@@ -103,6 +108,31 @@ def get_arch(model_name, instance_size, num_classes):
         x = Dense(num_classes, activation='softmax')(x)
         model = Model(inputs=base_model.input,
                       outputs=x)  # example of creation of TF-Keras model using the functional API
+
+    elif model_name == "cvc_net":
+        base_model = CVCNet(input_shape=instance_size, classes=num_classes)
+        base_model.trainable = False
+        x = base_model.output
+        x = Flatten()(x)
+        x = Dense(64)(x)
+        x = BatchNormalization()(x)
+        x = Dropout(0.5)(x)
+        x = Activation('relu')(x)
+        x = Dense(num_classes, activation='softmax')(x)
+        model = Model(inputs=base_model.input,
+                      outputs=x)
+    elif model_name == "vgg16":
+        base_model = VGG16(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
+        base_model.trainable = False
+        x = base_model.output
+        x = Flatten()(x)
+        x = Dense(64)(x)
+        x = BatchNormalization()(x)
+        x = Dropout(0.5)(x)
+        x = Activation('relu')(x)
+        x = Dense(num_classes, activation='softmax')(x)
+        model = Model(inputs=base_model.input,
+                      outputs=x)
 
 
     else:
