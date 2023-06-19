@@ -1,8 +1,7 @@
-
 import fast
 import numpy as np
 from src.resources.config import *
-from src.visualization.plot_predicted_stations import plot_pred_stations
+from src.visualization.predicted_stations import plot_pred_stations
 
 fast.Reporter.setGlobalReportMethod(fast.Reporter.COUT) # Uncomment to show debug info
 
@@ -22,7 +21,7 @@ class ClassificationToPlot(fast.PythonProcessObject):
     def execute(self):
         classification = self.getInputData(0)
         classification_arr = np.asarray(classification)
-        print(classification_arr)
+        print('classification_arr', classification_arr)
 
         img_arr = plot_pred_stations(self.labels, classification_arr)
         fast_image = fast.Image.createFromArray(img_arr)
@@ -42,8 +41,8 @@ class ImageClassificationWindow(object):
         self.classification_model = fast.NeuralNetwork.create(os.path.join(model_path, model_name), scaleFactor=1. / 255.)
         self.classification_model.connect(0, self.streamer)
 
-        # Classification (neural network output) to Text
-        self.station_classification_plot = ClassificationToPlot.create(name='Station', labels=station_labels)
+        # Classification (neural network output) to Plot
+        self.station_classification_plot = ClassificationToPlot.create(name='Station', labels=list(station_labels.keys()))
         self.station_classification_plot.connect(0, self.classification_model, 0)
 
         # Renderers
@@ -84,12 +83,58 @@ def run_nn_image_classification(station_labels, data_path, model_path, model_nam
 
     fast_classification.window.run()
 
+#TODO: remove later
+def set_stations_config(station_config_nr):
+    if station_config_nr == 1:
+        stations_config = {
+            'other': 0,
+            '4L': 1,
+            '4R': 2,
+            # 'other': 3,
+        }
+    elif station_config_nr == 2:
+        stations_config = {
+            'other': 0,
+            '4L': 1,
+            '4R': 2,
+            '7L': 3,
+            '7R': 4,
+        }
+    elif station_config_nr == 3:
+        stations_config = {
+            'other': 0,
+            '4L': 1,
+            '4R': 2,
+            '7L': 3,
+            '7R': 4,
+            '10L': 5,
+            '10R': 6,
+        }
+    elif station_config_nr == 4:
+        stations_config = {
+            'other': 0,
+            '4L': 1,
+            '4R': 2,
+            '7L': 3,
+            '7R': 4,
+            '10L': 5,
+            '10R': 6,
+            '11L': 7,
+            '11R': 8,
+            '7': 9,
+        }
+    else:
+        print("Choose one of the predefined sets of stations: config_nbr={1, 2, 3, 4}")
+        exit(-1)
+
+    return stations_config
+
 
 run_nn_image_classification(station_labels=set_stations_config(station_config_nr),
                             data_path=local_data_path,
                             model_path=local_model_path,
                             model_name=local_model_name,
-                            framerate=-1
+                            framerate=1
                             )
 
 
