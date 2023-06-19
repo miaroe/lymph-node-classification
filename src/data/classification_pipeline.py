@@ -3,16 +3,16 @@ import logging
 
 import numpy as np
 from mlmia import DatasetPipeline, TaskType
-from src.resources.config import set_stations_config
 
 from src.utils.importers import load_png_file
 
 
 log = logging.getLogger()
 
+
 class EBUSClassificationPipeline(DatasetPipeline):
 
-    def __init__(self, image_shape=(256, 256), station_config_nr=3, *args, **kwargs):
+    def __init__(self, image_shape=(256, 256), station_config_nr=1, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.folder_pattern = ["subjects", "stations", "frames"]
@@ -26,10 +26,8 @@ class EBUSClassificationPipeline(DatasetPipeline):
         self.data_loader.targets_pattern = ["stations"]
         self.data_loader.apply_resize(height=image_shape[0], width=image_shape[1], apply_to=(0,))
 
-        self.stations_config = set_stations_config(station_config_nr=station_config_nr)
-        self.set_stations_to_label()
+        self.set_stations_config(config_nr=station_config_nr)
         self.num_stations = self.get_num_stations()
-
 
     def loader_function(self, filepath, index=None, *args, **kwargs):
 
@@ -57,6 +55,56 @@ class EBUSClassificationPipeline(DatasetPipeline):
 
         return inputs, targets
 
+    # -----------------------------  STATIONS CONFIG ----------------------------------
+
+    # Label lymph nodes in ascending order, and L before R stations
+    #   e.g. 4L, 4R, 7L, 7R, 10L, 10R, 11L, 11R, ...
+
+    def set_stations_config(self, config_nr):
+        if config_nr == 1:
+            self.stations_config = {
+                'other': 0,
+                '4L': 1,
+                '4R': 2,
+                # 'other': 3,
+            }
+        elif config_nr == 2:
+            self.stations_config = {
+                'other': 0,
+                '4L': 1,
+                '4R': 2,
+                '7L': 3,
+                '7R': 4,
+            }
+        elif config_nr == 3:
+            self.stations_config = {
+                'other': 0,
+                '4L': 1,
+                '4R': 2,
+                '7L': 3,
+                '7R': 4,
+                '10L': 5,
+                '10R': 6,
+            }
+        elif config_nr == 4:
+            self.stations_config = {
+                'other': 0,
+                '4L': 1,
+                '4R': 2,
+                '7L': 3,
+                '7R': 4,
+                '10L': 5,
+                '10R': 6,
+                '11L': 7,
+                '11R': 8,
+                '7': 9,
+            }
+        else:
+            print("Choose one of the predefined sets of stations: config_nbr={1, 2, 3, 4}")
+            exit(-1)
+
+        self.set_stations_to_label()
+
     def get_station(self, label):
         try:
             return self.stations_config[label]  # returns if label number is in configuration
@@ -75,3 +123,7 @@ class EBUSClassificationPipeline(DatasetPipeline):
         else:
             raise ValueError("Class has no stations config, and cannot determine number of stations")
 
+    def stations_to_label(self, x):
+        if x not in self.stations_to_label_dict.keys():
+            raise IndexError(f'Station {x} not an available station ({self.stations_to_label_dict.keys()})')
+        return self.stations_to_label_dict[x]

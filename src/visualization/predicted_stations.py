@@ -13,7 +13,7 @@ def plot_pred_stations(station_labels, pred):
     pred_max_i = np.argsort(pred)[::-1][:3] #index of top three predictions
 
     for i in pred_max_i:
-        plt.bar(list(station_labels.keys())[i], pred[i])
+        plt.bar(station_labels[i], pred[i])
 
     img_buf = io.BytesIO()
     plt.savefig(img_buf, format='png')

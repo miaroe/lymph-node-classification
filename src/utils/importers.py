@@ -25,7 +25,8 @@ def load_png_file(filepath):
     return importer.load_image(filepath)
 
 
-
+# only for testing purposes
+# import a random frame into utils
 def main():
     file = "frame_56.png"
     assert os.path.exists(file)
