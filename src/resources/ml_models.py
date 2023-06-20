@@ -121,22 +121,22 @@ def get_arch(model_name, instance_size, num_classes):
         x = Dense(num_classes, activation='softmax')(x)
         model = Model(inputs=base_model.input,
                       outputs=x)
+
     elif model_name == "vgg16":
         base_model = VGG16(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
         base_model.trainable = False
         x = base_model.output
         x = Flatten()(x)
-        x = Dense(64)(x)
-        x = BatchNormalization()(x)
-        x = Dropout(0.5)(x)
-        x = Activation('relu')(x)
+        x = Dense(64, activation='relu')(x)
+        x = Dense(32, activation='relu')(x)
         x = Dense(num_classes, activation='softmax')(x)
         model = Model(inputs=base_model.input,
                       outputs=x)
 
 
     else:
-        print("please choose supported models: {basic, inception, resnet, inception_multi-task, mobilenet}")
+        print("please choose supported models: {basic, inception, resnet, inception_multi-task, mobilenet,"
+              "cvc_net, vgg16}")
         exit()
 
     return model
