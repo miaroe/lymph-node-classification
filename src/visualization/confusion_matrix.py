@@ -9,7 +9,7 @@ import os
 plt.style.use('dark_background')
 
 
-def confusion_matrix_and_report(trainer, batch_generator, reports_path):
+def confusion_matrix_and_report(pipeline, model, batch_generator, reports_path):
     targets_arr = np.zeros(shape=len(batch_generator.files))
     outputs_arr = np.zeros(shape=len(batch_generator.files))
 
@@ -20,7 +20,7 @@ def confusion_matrix_and_report(trainer, batch_generator, reports_path):
         print('step_idx', step_idx)
         print('batch_size', batch_size)
 
-        outputs = trainer.model.predict(inputs, batch_size=batch_size)
+        outputs = model.predict(inputs, batch_size=batch_size)
         # categorical = to_categorical(np.argmax(outputs, axis=-1), pipeline.num_classes)
 
         idx = step_idx * batch_size
@@ -29,24 +29,24 @@ def confusion_matrix_and_report(trainer, batch_generator, reports_path):
 
     # -------------------------------------------- FIGURE --------------------------------------------
 
-    cm = confusion_matrix(targets_arr, outputs_arr, labels=range(trainer.pipeline.get_num_stations()))
+    cm = confusion_matrix(targets_arr, outputs_arr, labels=range(pipeline.get_num_stations()))
     disp = ConfusionMatrixDisplay(confusion_matrix=cm,
-                                  display_labels=trainer.pipeline.stations_config.keys())
+                                  display_labels=pipeline.stations_config.keys())
     disp.plot()
 
     fig_path = os.path.join(reports_path, 'figures/')
     os.makedirs(fig_path, exist_ok=True)
-    disp.figure_.savefig(fig_path + trainer.model_name + '_confusion_matrix.png')
+    disp.figure_.savefig(fig_path + 'confusion_matrix.png')
 
     # -------------------------------------------- REPORT --------------------------------------------
 
     report = classification_report(y_true=targets_arr,
                                    y_pred=outputs_arr,
                                    digits=3,
-                                   labels=range(trainer.pipeline.get_num_stations()),
-                                   target_names=trainer.pipeline.stations_config.keys(),
+                                   labels=range(pipeline.get_num_stations()),
+                                   target_names=pipeline.stations_config.keys(),
                                    output_dict=True)
     #save report to csv
     df = pd.DataFrame(report).transpose()
     os.makedirs(reports_path, exist_ok=True)
-    df.to_csv(reports_path + trainer.model_name + '_report.csv', index=True, sep='\t')
+    df.to_csv(reports_path + 'report.csv', index=True, sep='\t')

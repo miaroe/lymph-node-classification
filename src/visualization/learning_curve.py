@@ -1,13 +1,16 @@
 import matplotlib.pyplot as plt
 import os
+from src.utils.json_parser import parse_json
 import pandas as pd
 
 plt.style.use('dark_background')
 
-def plot_learning_curve(history_path, model_name, reports_path):
-    history = pd.read_csv(os.path.join(history_path, model_name + "-training_history.csv"))
-    train_loss = history['loss'].to_numpy()
-    val_loss = history['val_loss'].to_numpy()
+def plot_learning_curve(model_path, reports_path):
+
+    results = parse_json(os.path.join(model_path + "results.json"))['0']
+
+    train_loss = [entry['loss'] for entry in results]
+    val_loss = [entry['val_loss'] for entry in results]
     epochs = range(1, len(train_loss) + 1)
 
     fig = plt.figure(figsize=(10, 5))
@@ -28,4 +31,4 @@ def plot_learning_curve(history_path, model_name, reports_path):
 
     fig_path = os.path.join(reports_path, 'figures/')
     os.makedirs(fig_path, exist_ok=True)
-    plt.savefig(fig_path + model_name + '_learning_curve.png')
+    plt.savefig(fig_path + 'learning_curve.png')

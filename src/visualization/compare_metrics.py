@@ -1,30 +1,31 @@
 import matplotlib.pyplot as plt
 import os
-import pandas as pd
 import re
+from src.utils.json_parser import parse_json
 
 plt.style.use('dark_background')
 
-def plot_compare_metrics(history_path, model_names, reports_path):
+def plot_compare_metrics(model_paths, reports_path):
 
     # create a figure with 4 subplots
     fig, axs = plt.subplots(2, 2, figsize=(10, 10))
     fig.suptitle('Training and Validation Metrics')
 
     # iterate over the history files
-    for model_name in (model_names):
-        history = pd.read_csv(os.path.join(history_path, model_name + "-training_history.csv"))
-        train_loss = history['loss'].to_numpy()
-        val_loss = history['val_loss'].to_numpy()
-        train_accuracy = history['accuracy'].to_numpy()
-        val_accuracy = history['val_accuracy'].to_numpy()
-        train_precision = history['precision'].to_numpy()
-        val_precision = history['val_precision'].to_numpy()
-        train_recall = history['recall'].to_numpy()
-        val_recall = history['val_recall'].to_numpy()
+    for model_path in (model_paths):
+        results = parse_json(os.path.join(model_path + "/results.json"))['0']
+
+        train_loss = [entry['loss'] for entry in results]
+        val_loss = [entry['val_loss'] for entry in results]
+        train_accuracy = [entry['accuracy'] for entry in results]
+        val_accuracy = [entry['val_accuracy'] for entry in results]
+        train_precision = [entry['precision'] for entry in results]
+        val_precision = [entry['val_precision'] for entry in results]
+        train_recall = [entry['recall'] for entry in results]
+        val_recall = [entry['val_recall'] for entry in results]
         epochs = range(1, len(train_loss) + 1)
 
-        model_name = re.search(r"Loss-(.*?)_", model_name).group(1)
+        model_name = os.path.basename(model_path)
 
         # plot and label the training and validation loss values
         axs[0, 0].plot(epochs, train_loss, label=model_name + ' Training Loss')

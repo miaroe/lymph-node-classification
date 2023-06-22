@@ -1,46 +1,63 @@
+import os
+from tensorflow.keras.metrics import Precision, Recall
+
+from src.resources.loss_dict import get_loss
 from src.visualization.learning_curve import plot_learning_curve
 from src.visualization.visual_model import visual_model
 from src.visualization.confusion_matrix import confusion_matrix_and_report
 from src.visualization.station_distribution import station_distribution_figure_and_report
 from src.visualization.compare_metrics import plot_compare_metrics
+from src.data.classification_pipeline import EBUSClassificationPipeline
+from src.resources.ml_models import get_arch
+from src.resources.train_config import get_train_config
 
 # -----------------------------  EVALUATING ----------------------------------
-def evaluate_model(trainer, reports_path, learning_curve, conf_matrix, model_layout, station_distribution, compare_metrics):
-    print("Evaluating model: " + trainer.model_path + trainer.model_name)
+def evaluate_model(reports_path, model_path, learning_curve, conf_matrix, model_layout,
+                   station_distribution, compare_metrics):
+    print("Evaluating model: " + model_path)
 
-    trainer.model.load_weights(trainer.model_path + trainer.model_name)
-    batch_generator = trainer.generator.validation
+    config_path = os.path.join(model_path, 'config.json')
+
+
+    pipeline = EBUSClassificationPipeline.from_config(config_path)
+    train_config = get_train_config(config_path)
+
+    model = get_arch(train_config.get('model_arch'), train_config.get('instance_size'), pipeline.get_num_stations())
+    model.compile(loss=get_loss(train_config.get('loss')), optimizer='adam', metrics=['accuracy', Precision(), Recall()])
+    model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_partial()
+
+    batch_generator = pipeline.generator_containers[0]
     '''
-    score = trainer.model.evaluate(batch_generator,
-                               steps=batch_generator.steps_per_epoch,
+    score = model.evaluate(batch_generator.validation,
+                               steps=batch_generator.validation.steps_per_epoch,
                                return_dict=True
                                )
     print(f'{"Metric":<12}{"Value"}')
     for metric, value in score.items():
         print(f'{metric:<12}{value:<.4f}')
+
     
-    
-    x_test, y_test = trainer.generator.testing.load_dataset()
-    pred_test = trainer.model.evaluate(x_test, y_test, return_dict=True)
+    x_test, y_test = batch_generator.get_test_data()
+    pred_test = model.evaluate(x_test, y_test, return_dict=True)
     print({"test_{}".format(key): val for key, val in pred_test.items()})
     print(pred_test)
-'''
+    '''
     # save learning curve to src/reports/figures
     if learning_curve:
-        plot_learning_curve(trainer.history_path, trainer.model_name, reports_path)
+        plot_learning_curve(model_path, reports_path)
 
     # save confusion matrix to src/reports/figures and save classification report to src/reports
     if conf_matrix:
-        confusion_matrix_and_report(trainer, batch_generator, reports_path)
+        confusion_matrix_and_report(pipeline, model, batch_generator.validation, reports_path)
 
     # save model layout to src/reports/figures
     if model_layout:
-        visual_model(trainer.model, reports_path, trainer.model_arch)
+        visual_model(model, reports_path)
 
     if station_distribution:
-        station_distribution_figure_and_report(trainer, reports_path)
+        station_distribution_figure_and_report(pipeline, batch_generator.training, reports_path)
 
     if compare_metrics:
-        model_names = ['Arch-vgg16_2023-06-19_11:48:01_Stations_config_nr-1_Epochs-50_Loss-categoricalCrossentropy_ImageSize-256_BatchSize-32_Augmentation-True_ValPercent-20',
-                       'Arch-vgg16_Stations_config_nr-4_2023-06-16_15:59:03_Epochs-100_Loss-focalLoss_ImageSize-256_BatchSize-32_Augmentation-True_ValPercent-20']
-        plot_compare_metrics(trainer.history_path, model_names, reports_path)
+        model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in ['2023-06-22/10:24:57', '2023-06-22/10:16:52']]
+        plot_compare_metrics(model_paths, reports_path)
+
