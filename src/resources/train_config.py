@@ -2,8 +2,6 @@ from src.resources.config import *
 from mlmia import TrainConfig
 from src.utils.json_parser import parse_json
 
-os.makedirs(model_path, exist_ok=True)
-
 config = TrainConfig(batch_size=batch_size,
                      model_arch=model_arch,
                      instance_size=instance_size,

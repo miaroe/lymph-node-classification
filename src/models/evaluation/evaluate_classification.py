@@ -55,9 +55,9 @@ def evaluate_model(reports_path, model_path, learning_curve, conf_matrix, model_
         visual_model(model, reports_path)
 
     if station_distribution:
-        station_distribution_figure_and_report(pipeline, batch_generator.training, reports_path)
+        station_distribution_figure_and_report(pipeline, batch_generator, reports_path)
 
     if compare_metrics:
-        model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in ['2023-06-22/10:24:57', '2023-06-22/10:16:52']]
+        model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in ['2023-06-23/16:51:46', '2023-06-23/16:51:46']]
         plot_compare_metrics(model_paths, reports_path)
 

@@ -10,22 +10,21 @@ plt.style.use('dark_background')
 
 
 def confusion_matrix_and_report(pipeline, model, batch_generator, reports_path):
-    targets_arr = np.zeros(shape=len(batch_generator.files))
-    outputs_arr = np.zeros(shape=len(batch_generator.files))
+    targets_arr = np.zeros(shape=len(batch_generator.files), dtype=int)
+    outputs_arr = np.zeros(shape=len(batch_generator.files), dtype=int)
 
     for step_idx in tqdm(range(batch_generator.steps_per_epoch), 'Batches'):
         inputs, targets = next(batch_generator)
-        batch_size = inputs.shape[0]
-        print(inputs.shape, targets.shape)
+
+        print(inputs.shape, targets.shape) #TODO: fix evaluation of confusion matrix so that it runs directly
         print('step_idx', step_idx)
-        print('batch_size', batch_size)
+        print('batch_size', batch_generator.batch_size)
 
-        outputs = model.predict(inputs, batch_size=batch_size)
-        # categorical = to_categorical(np.argmax(outputs, axis=-1), pipeline.num_classes)
+        outputs = model.predict(inputs, batch_size=inputs.shape[0])
 
-        idx = step_idx * batch_size
-        targets_arr[idx:idx + batch_size] = np.argmax(targets, axis=-1)
-        outputs_arr[idx:idx + batch_size] = np.argmax(outputs, axis=-1)
+        idx = step_idx * batch_generator.batch_size
+        targets_arr[idx:idx + inputs.shape[0]] = np.argmax(targets, axis=-1)
+        outputs_arr[idx:idx + inputs.shape[0]] = np.argmax(outputs, axis=-1)
 
     # -------------------------------------------- FIGURE --------------------------------------------
 

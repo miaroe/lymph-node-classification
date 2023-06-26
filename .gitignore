@@ -1,0 +1,15 @@
+.idea
+.DS_Store
+
+# Environments
+venv/
+env/
+environment/
+
+# File types
+*.log
+*.json
+
+# Folders
+output/
+data/
