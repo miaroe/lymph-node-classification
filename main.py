@@ -28,8 +28,6 @@ def main():
                     instance_size=instance_size,
                     learning_rate=learning_rate,
                     model_path=model_path,
-                    history_path=history_path,
-                    model_name=model_name,
                     patience=patience,
                     epochs=epochs)
 

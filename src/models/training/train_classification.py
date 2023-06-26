@@ -1,9 +1,12 @@
 import os
 import logging
+import tensorflow as tf
+import numpy as np
 
 from mlmia.logger import ExperimentLogger
 from mlmia.training import enable_gpu_growth
 from sklearn.model_selection import StratifiedKFold
+from sklearn.utils import class_weight
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import Precision, Recall
@@ -11,22 +14,20 @@ from src.resources.loss_dict import get_loss
 from src.resources.train_config import set_train_config
 from src.data.classification_pipeline import EBUSClassificationPipeline
 from src.resources.ml_models import get_arch
-import tensorflow as tf
-
+from src.utils.count_station_distribution import count_station_distribution
 
 enable_gpu_growth()
 logger = logging.getLogger()
 
 def train_model(stratified_cv, data_path, log_path, image_shape, tf_dataset, validation_split, test_split,
                 batch_size, split_by, station_config_nr, loss, augment_data, model_arch,
-                instance_size, learning_rate, model_path, history_path, model_name, patience,
+                instance_size, learning_rate, model_path, patience,
                 epochs):
 
     print("Trainer: " + model_arch)
     trainer = BaselineTrainer(data_path, log_path, image_shape, tf_dataset, validation_split, test_split, batch_size,
-                                split_by, station_config_nr, loss, augment_data, model_arch,
-                                instance_size, learning_rate, model_path, history_path,
-                                model_name, patience, epochs)
+                              split_by, station_config_nr, loss, augment_data, model_arch, instance_size,
+                              learning_rate, model_path, patience, epochs)
 
     # Perform training
     trainer.train(stratified_cv)
@@ -49,8 +50,6 @@ class BaselineTrainer:
                  instance_size: tuple,
                  learning_rate: float,
                  model_path: str,
-                 history_path: str,
-                 model_name: str,
                  patience: int,
                  epochs: int
                  ):
@@ -69,8 +68,6 @@ class BaselineTrainer:
         self.instance_size = instance_size
         self.learning_rate = learning_rate
         self.model_path = model_path
-        self.history_path = history_path
-        self.model_name = model_name
         self.patience = patience
         self.epochs = epochs
 
@@ -100,6 +97,8 @@ class BaselineTrainer:
 
         self.generator = self.pipeline.generator_containers[0]
 
+        #self.pipeline.preview_training_batch()
+
         print('Training subjects', self.generator.training.get_subjects())
         print('Validation subjects', self.generator.validation.get_subjects())
 
@@ -117,13 +116,12 @@ class BaselineTrainer:
 
     def save_model(self):
         os.makedirs(self.model_path, exist_ok=True)
-        os.makedirs(self.history_path, exist_ok=True)
 
         # make experiment logger
-        self.train_config = set_train_config()
-        self.experiment_logger = ExperimentLogger(logdir=self.train_config.log_directory,
+        train_config = set_train_config()
+        self.experiment_logger = ExperimentLogger(logdir=train_config.log_directory,
                                                   pipeline_config=self.pipeline.get_config(),
-                                                  train_config=self.train_config.get_config())
+                                                  train_config=train_config.get_config())
         self.experiment_logger.save_current_config()
 
         save_best = ModelCheckpoint(filepath=self.experiment_logger.create_checkpoint_filepath(),
@@ -132,7 +130,7 @@ class BaselineTrainer:
                                     save_weights_only=False)
 
         early_stop = EarlyStopping(monitor='val_loss', min_delta=0.0001,
-                                   patience=self.train_config.early_stop_patience, verbose=1)
+                                   patience=train_config.early_stop_patience, verbose=1)
 
         return save_best, early_stop
 
@@ -154,13 +152,18 @@ class BaselineTrainer:
 
         else:
             save_best, early_stop = self.save_model()
+            #balance data by calculating class weights and using them in fit
+            count_array = count_station_distribution(self.pipeline, self.generator.training)
+            class_weights = {idx: (1/ elem) * np.sum(count_array)/self.pipeline.get_num_stations() for idx, elem in enumerate(count_array)}
+            print(class_weights)
 
             self.model.fit(self.generator.training,
                       epochs=self.epochs,
                       steps_per_epoch=self.generator.training.steps_per_epoch,
                       validation_data=self.generator.validation,
                       validation_steps=self.generator.validation.steps_per_epoch,
-                      callbacks=[save_best, early_stop, self.experiment_logger])
+                      callbacks=[save_best, early_stop, self.experiment_logger],
+                      class_weight=class_weights)
 
             best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
             best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
