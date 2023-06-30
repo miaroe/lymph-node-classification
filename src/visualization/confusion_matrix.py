@@ -16,10 +16,6 @@ def confusion_matrix_and_report(pipeline, model, batch_generator, reports_path):
     for step_idx in tqdm(range(batch_generator.steps_per_epoch), 'Batches'):
         inputs, targets = next(batch_generator)
 
-        print(inputs.shape, targets.shape) #TODO: fix evaluation of confusion matrix so that it runs directly
-        print('step_idx', step_idx)
-        print('batch_size', batch_generator.batch_size)
-
         outputs = model.predict(inputs, batch_size=inputs.shape[0])
 
         idx = step_idx * batch_generator.batch_size
