@@ -3,7 +3,6 @@ from tensorflow.python.framework.random_seed import set_seed
 from src.resources.config import *
 from src.models.training.train_classification import train_model
 from src.models.evaluation.evaluate_classification import evaluate_model
-from src.visualization.station_distribution import station_distribution_figure_and_report
 
 
 def main():
