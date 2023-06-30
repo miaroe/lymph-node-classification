@@ -6,8 +6,9 @@ from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.applications import VGG16
 from tensorflow.keras.layers import Input, Dense, Conv2D, MaxPooling2D, Dropout, Flatten, SpatialDropout2D, \
     ZeroPadding2D, Activation, AveragePooling2D, UpSampling2D, BatchNormalization, ConvLSTM2D, \
-    TimeDistributed, Concatenate, Lambda, Reshape, LSTM
+    TimeDistributed, Concatenate, Lambda, Reshape, LSTM, GlobalMaxPooling2D, GlobalAveragePooling2D
 from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.layers import PReLU
 
 
 # see here for already built-in pretrained architectures:
@@ -110,15 +111,14 @@ def get_arch(model_name, instance_size, num_classes):
                       outputs=x)  # example of creation of TF-Keras model using the functional API
 
     elif model_name == "cvc_net":
-        base_model = CVCNet(input_shape=instance_size, classes=num_classes)
-        base_model.trainable = False
+
+        base_model = CVCNet(include_top=False, input_shape=instance_size, classes=num_classes)
+        #base_model.trainable = False
         x = base_model.output
-        x = Flatten()(x)
-        x = Dense(64)(x)
-        x = BatchNormalization()(x)
-        x = Dropout(0.5)(x)
-        x = Activation('relu')(x)
-        x = Dense(num_classes, activation='softmax')(x)
+        x = Conv2D(num_classes, (1, 1))(x)
+        x = PReLU()(x)
+        x = GlobalAveragePooling2D()(x)
+        x = Activation("softmax", name="predictions")(x)
         model = Model(inputs=base_model.input,
                       outputs=x)
 
@@ -126,9 +126,23 @@ def get_arch(model_name, instance_size, num_classes):
         base_model = VGG16(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
         base_model.trainable = False
         x = base_model.output
-        x = Flatten()(x)
-        x = Dense(64, activation='relu')(x)
-        x = Dense(32, activation='relu')(x)
+        x = GlobalMaxPooling2D()(x)
+        x = Dropout(0.5)(x)
+        x = Dense(num_classes, activation='softmax')(x)
+        model = Model(inputs=base_model.input,
+                      outputs=x)
+
+    elif model_name == "vgg16_v2":
+        base_model = VGG16(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
+        base_model.trainable = False
+        x = base_model.output
+        x = GlobalMaxPooling2D()(x)
+        x = Dense(1024, activation='relu')(x)
+        x = Dropout(0.5)(x)
+        x = BatchNormalization()(x)
+        x = Dense(512, activation='relu')(x)
+        x = Dropout(0.5)(x)
+        x = BatchNormalization()(x)
         x = Dense(num_classes, activation='softmax')(x)
         model = Model(inputs=base_model.input,
                       outputs=x)

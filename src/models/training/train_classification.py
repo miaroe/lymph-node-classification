@@ -10,7 +10,7 @@ from sklearn.utils import class_weight
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import Precision, Recall
-from src.resources.loss_dict import get_loss
+from src.resources.loss import get_loss
 from src.resources.train_config import set_train_config
 from src.data.classification_pipeline import EBUSClassificationPipeline
 from src.resources.ml_models import get_arch
@@ -88,8 +88,9 @@ class BaselineTrainer:
                                    test_split=self.test_split,
                                    batch_size=self.batch_size,
                                    split_by=self.split_by,
-                                   station_config_nr=self.station_config_nr,
+                                   station_config_nr=self.station_config_nr
                                    )
+
         if self.augment_data:
             self.pipeline.data_augmentor.add_rotation(max_angle=30, apply_to=(0,))
             self.pipeline.data_augmentor.add_gamma_transformation(0.5, 1.5)

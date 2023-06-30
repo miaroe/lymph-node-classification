@@ -1,7 +1,7 @@
 import os
 from tensorflow.keras.metrics import Precision, Recall
 
-from src.resources.loss_dict import get_loss
+from src.resources.loss import get_loss
 from src.visualization.learning_curve import plot_learning_curve
 from src.visualization.visual_model import visual_model
 from src.visualization.confusion_matrix import confusion_matrix_and_report
@@ -58,6 +58,8 @@ def evaluate_model(reports_path, model_path, learning_curve, conf_matrix, model_
         station_distribution_figure_and_report(pipeline, batch_generator, reports_path)
 
     if compare_metrics:
-        model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in ['2023-06-23/16:51:46', '2023-06-23/16:51:46']]
-        plot_compare_metrics(model_paths, reports_path)
+        model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in
+                      ['2023-06-30/13:11:05', '2023-06-30/13:28:00', '2023-06-30/14:19:33', '2023-06-30/11:55:19', '2023-06-30/10:38:40', '2023-06-30/11:12:17']]
+        model_names = ['resnet', 'cvc_net', 'basic', 'vgg16', 'vgg16_v2', 'inception'] #saved in filename
+        plot_compare_metrics(model_paths, model_names, reports_path)
 
