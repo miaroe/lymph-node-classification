@@ -24,9 +24,10 @@ def confusion_matrix_and_report(pipeline, model, batch_generator, reports_path):
 
     # -------------------------------------------- FIGURE --------------------------------------------
 
-    cm = confusion_matrix(targets_arr, outputs_arr, labels=range(pipeline.get_num_stations()))
+    #does not include 'other' class
+    cm = confusion_matrix(targets_arr, outputs_arr, labels=range(1, pipeline.get_num_stations()))
     disp = ConfusionMatrixDisplay(confusion_matrix=cm,
-                                  display_labels=pipeline.stations_config.keys())
+                                  display_labels=list(pipeline.stations_config.keys())[1:])
     disp.plot()
 
     fig_path = os.path.join(reports_path, 'figures/')
@@ -38,8 +39,8 @@ def confusion_matrix_and_report(pipeline, model, batch_generator, reports_path):
     report = classification_report(y_true=targets_arr,
                                    y_pred=outputs_arr,
                                    digits=3,
-                                   labels=range(pipeline.get_num_stations()),
-                                   target_names=pipeline.stations_config.keys(),
+                                   labels=range(1, pipeline.get_num_stations()),
+                                   target_names=list(pipeline.stations_config.keys())[1:],
                                    output_dict=True)
     #save report to csv
     df = pd.DataFrame(report).transpose()

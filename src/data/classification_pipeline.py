@@ -12,7 +12,7 @@ log = logging.getLogger()
 
 class EBUSClassificationPipeline(DatasetPipeline):
 
-    def __init__(self, image_shape=(256, 256), station_config_nr=4, *args, **kwargs):
+    def __init__(self, image_shape=(256, 256), station_config_nr=1, *args, **kwargs): #TODO: make sure station_config_nr i set from config
         super().__init__(*args, **kwargs)
 
         self.folder_pattern = ["subjects", "stations", "frames"]
@@ -28,7 +28,9 @@ class EBUSClassificationPipeline(DatasetPipeline):
 
         self.set_stations_config(config_nr=station_config_nr)
         self.num_stations = self.get_num_stations()
-        self.mask = False # set to True to mask out poor quality images
+
+        self.mask_poor = False # set to True to mask out poor quality images
+        self.mask_other = True # set to True to mask out images not in station config
 
     def loader_function(self, filepath, index=None, *args, **kwargs):
 
@@ -43,26 +45,31 @@ class EBUSClassificationPipeline(DatasetPipeline):
         # Crop image
         img = img[100:1035, 530:1658]
 
-        # Check image quality and set to zero if poor
-        if self.mask:
-            sequence_quality_map = get_sequence_quality_map()
-            if sequence_quality_map.get(dirname) == 'poor':
-                return np.zeros(shape=(*img.shape, 3), dtype=np.float32), \
-                    -1.0 * np.ones(shape=self.num_stations, dtype=np.uint8)
-
         # Normalize image
         inputs = (img[..., None]/255.0).astype(np.float32)
-        inputs = inputs * np.ones(shape=(*img.shape, 3))  # 3 ch as input to classification network
+        inputs = inputs * np.ones(shape=(*img.shape, 3)) # 3 ch as input to classification network
+        inputs = inputs.astype(np.float32)
 
-        # add bilateral filter with progress bar
+        # add bilateral filter
         #inputs = bilateral_filter(inputs)
 
         # LN STATION
         station_name = os.path.split(dirname)[1] #Station_10L_001
         station_label = station_name.split('_')[1]  # split ['Station', '10R', '001', 'ok']
 
-        targets = np.zeros(shape=self.num_stations, dtype=np.uint8) # [0 0 0 0 0 0 0] for LABEL_CONFIG=3
-        targets[self.get_station(station_label)] = 1 #[0 0 0 0 0 1 0] for station_name = 10L
+        targets = np.zeros(shape=self.num_stations, dtype=np.float32)  # [0 0 0 0 0 0 0] for LABEL_CONFIG=3
+        targets[self.get_station(station_label)] = 1  # [0 0 0 0 0 1 0] for station_name = 10L
+
+        # Mask out other stations
+        if self.mask_other:
+            if station_label not in self.stations_config.keys():
+                inputs, targets = self.set_empty_image(inputs, targets)
+
+        # Check image quality and set to zero if poor
+        if self.mask_poor:
+            sequence_quality_map = get_sequence_quality_map()
+            if sequence_quality_map.get(dirname) == 'poor':
+                inputs, targets = self.set_empty_image(inputs, targets)
 
         return inputs, targets
 
@@ -76,8 +83,8 @@ class EBUSClassificationPipeline(DatasetPipeline):
             self.stations_config = {
                 'other': 0,
                 '4L': 1,
-                '4R': 2,
-                # 'other': 3,
+                '7R': 2
+
             }
         elif config_nr == 2:
             self.stations_config = {
@@ -99,15 +106,16 @@ class EBUSClassificationPipeline(DatasetPipeline):
             }
         elif config_nr == 4:
             self.stations_config = {
-                '4L': 0,
-                '4R': 1,
-                '7L': 2,
-                '7R': 3,
-                '10L': 4,
-                '10R': 5,
-                '11L': 6,
-                '11R': 7,
-                '7': 8,
+                'other': 0,
+                '4L': 1,
+                '4R': 2,
+                '7L': 3,
+                '7R': 4,
+                '10L': 5,
+                '10R': 6,
+                '11L': 7,
+                '11R': 8,
+                '7': 9,
             }
         else:
             print("Choose one of the predefined sets of stations: config_nbr={1, 2, 3, 4}")
@@ -119,8 +127,7 @@ class EBUSClassificationPipeline(DatasetPipeline):
         try:
             return self.stations_config[label]  # returns if label number is in configuration
         except KeyError:
-            pass
-            #return self.stations_config['other']  # else, return class number for 'other'
+            return self.stations_config['other']  # else, return class number for 'other'
 
     def set_stations_to_label(self):
         stations_to_label = {}
@@ -138,4 +145,9 @@ class EBUSClassificationPipeline(DatasetPipeline):
         if x not in self.stations_to_label_dict.keys():
             raise IndexError(f'Station {x} not an available station ({self.stations_to_label_dict.keys()})')
         return self.stations_to_label_dict[x]
+
+    def set_empty_image(self, inputs, targets):
+        inputs = np.zeros_like(inputs, dtype=np.float32)
+        targets = np.ones_like(targets, dtype=np.float32) * -1.0
+        return inputs, targets
 

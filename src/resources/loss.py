@@ -1,6 +1,7 @@
 import tensorflow_addons as tfa
 import tensorflow as tf
 from tensorflow.keras.losses import Loss
+import numpy as np
 
 class MaskedMeanAbsoluteError(Loss):
 
@@ -33,12 +34,13 @@ class MaskedCategoricalCrossEntropy(Loss):
         mask = y_true != mask_value
         y_pred = y_pred[mask]
         y_true = y_true[mask]
-        return tf.keras.metrics.categorical_crossentropy(y_true, y_pred)
+        loss = tf.keras.metrics.categorical_crossentropy(y_true, y_pred)
+        return loss
 
 
 def get_loss(loss_name):
     loss_dict = {
-        "categoricalCrossentropy": tf.keras.losses.CategoricalCrossentropy(),
+        "categoricalCrossEntropy": tf.keras.losses.CategoricalCrossentropy(),
         "focalLoss": tfa.losses.SigmoidFocalCrossEntropy(),
         "maskedMeanAbsoluteError": MaskedMeanAbsoluteError(),
         "maskedBinaryCrossEntropy": MaskedBinaryCrossEntropy(),
