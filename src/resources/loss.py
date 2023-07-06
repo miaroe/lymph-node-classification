@@ -41,6 +41,7 @@ class MaskedCategoricalCrossEntropy(Loss):
 def get_loss(loss_name):
     loss_dict = {
         "categoricalCrossEntropy": tf.keras.losses.CategoricalCrossentropy(),
+        "binaryCrossEntropy": tf.keras.losses.BinaryCrossentropy(),
         "focalLoss": tfa.losses.SigmoidFocalCrossEntropy(),
         "maskedMeanAbsoluteError": MaskedMeanAbsoluteError(),
         "maskedBinaryCrossEntropy": MaskedBinaryCrossEntropy(),

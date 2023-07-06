@@ -8,7 +8,8 @@ config = TrainConfig(batch_size=batch_size,
                      loss=loss,
                      mask_poor = mask_poor,
                      mask_other = mask_other,
-                     station_config_nr=station_config_nr,
+                     stations_config=stations_config,
+                     num_stations=num_stations,
                      data_path=data_path,
                      image_shape=(img_size, img_size),
                      early_stop_patience=patience,
@@ -20,6 +21,6 @@ config = TrainConfig(batch_size=batch_size,
 def set_train_config():
     return config
 
-def get_train_config(config_path):
+def get_config(config_path):
     json_config = parse_json(config_path)
-    return json_config["train_config"]
+    return json_config

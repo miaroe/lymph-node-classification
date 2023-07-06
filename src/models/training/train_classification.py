@@ -2,11 +2,10 @@ import os
 import logging
 import tensorflow as tf
 import numpy as np
+import matplotlib.pyplot as plt
 
-from mlmia.logger import ExperimentLogger
+from src.models.training.experimentLogger import ExperimentLogger
 from mlmia.training import enable_gpu_growth
-from sklearn.model_selection import StratifiedKFold
-from sklearn.utils import class_weight
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import Precision, Recall
@@ -19,18 +18,20 @@ from src.utils.count_station_distribution import count_station_distribution
 enable_gpu_growth()
 logger = logging.getLogger()
 
-def train_model(stratified_cv, data_path, log_path, image_shape, tf_dataset, validation_split, test_split,
-                batch_size, split_by, station_config_nr, loss, augment_data, model_arch,
+def train_model(data_path, log_path, image_shape, validation_split, test_split,
+                batch_size, stations_config, num_stations, loss, model_arch,
                 instance_size, learning_rate, model_path, patience,
                 epochs):
 
     print("Trainer: " + model_arch)
-    trainer = BaselineTrainer(data_path, log_path, image_shape, tf_dataset, validation_split, test_split, batch_size,
-                              split_by, station_config_nr, loss, augment_data, model_arch, instance_size,
+    trainer = BaselineTrainer(data_path, log_path, image_shape, validation_split, test_split, batch_size,
+                              stations_config, num_stations, loss, model_arch, instance_size,
                               learning_rate, model_path, patience, epochs)
 
     # Perform training
-    trainer.train(stratified_cv)
+    trainer.train()
+
+    return trainer
 
 class BaselineTrainer:
 
@@ -38,14 +39,12 @@ class BaselineTrainer:
                  data_path: str,
                  log_path: str,
                  image_shape: tuple,
-                 tf_dataset: bool,
                  validation_split: float,
                  test_split: float,
                  batch_size: int,
-                 split_by: str,
-                 station_config_nr: int,
+                 stations_config: dict,
+                 num_stations: int,
                  loss: str,
-                 augment_data: bool,
                  model_arch: str,
                  instance_size: tuple,
                  learning_rate: float,
@@ -56,14 +55,12 @@ class BaselineTrainer:
         self.data_path = data_path
         self.log_path = log_path
         self.image_shape = image_shape
-        self.tf_dataset = tf_dataset
         self.validation_split = validation_split
         self.test_split = test_split
         self.batch_size = batch_size
-        self.split_by = split_by
-        self.station_config_nr = station_config_nr
+        self.stations_config = stations_config
+        self.num_stations = num_stations
         self.loss = loss
-        self.augment_data = augment_data
         self.model_arch = model_arch
         self.instance_size = instance_size
         self.learning_rate = learning_rate
@@ -71,48 +68,47 @@ class BaselineTrainer:
         self.patience = patience
         self.epochs = epochs
 
-
         self.pipeline = None
         self.model = None
-        self.generator = None
         self.callbacks = None
+        self.train_ds = None
+        self.val_ds = None
 
     #-----------------------------  PREPROCESSING ----------------------------------
 
     # Set up pipeline
     def preprocess(self):
         self.pipeline = EBUSClassificationPipeline(data_path=self.data_path,
-                                   image_shape=self.image_shape,
-                                   tf_dataset=self.tf_dataset,
-                                   validation_split=self.validation_split,
-                                   test_split=self.test_split,
-                                   batch_size=self.batch_size,
-                                   split_by=self.split_by,
-                                   station_config_nr=self.station_config_nr
-                                   )
+                                                   batch_size=self.batch_size,
+                                                   image_shape=self.image_shape,
+                                                   validation_split=self.validation_split,
+                                                   station_names=list(self.stations_config.keys()),
+                                                   num_stations=self.num_stations
+                                                   )
 
-        if self.augment_data:
-            self.pipeline.data_augmentor.add_rotation(max_angle=30, apply_to=(0,))
-            self.pipeline.data_augmentor.add_gamma_transformation(0.5, 1.5)
-            self.pipeline.data_augmentor.add_gaussian_shadow()
+        self.train_ds, self.val_ds = self.pipeline.loader_function()
 
-        self.generator = self.pipeline.generator_containers[0]
-
-        #self.pipeline.preview_training_batch()
-
-        print('Training subjects', self.generator.training.get_subjects())
-        print('Validation subjects', self.generator.validation.get_subjects())
+        plt.figure(figsize=(10, 10))
+        class_names = list(self.stations_config.keys())
+        for images, labels in self.train_ds.take(1):
+            for i in range(9):
+                ax = plt.subplot(3, 3, i + 1)
+                plt.imshow(images[i].numpy().astype("uint8"))
+                plt.title(class_names[np.argmax(labels[i])])
+                plt.axis("off")
+        plt.show()
 
     # -----------------------------  BUILDING AND SAVING MODEL ----------------------------------
 
     def build_model(self):
-        self.model = get_arch(self.model_arch, self.instance_size, self.pipeline.get_num_stations())
+
+        self.model = get_arch(self.model_arch, self.instance_size, self.num_stations)
         print(self.model.summary())
 
         self.model.compile(
             optimizer=Adam(self.learning_rate),
             loss=get_loss(self.loss),
-            metrics=['accuracy', Precision(), Recall()] # TODO: add precision and recall, without error
+            metrics=['accuracy', Precision(), Recall()]
         )
 
     def save_model(self):
@@ -121,7 +117,6 @@ class BaselineTrainer:
         # make experiment logger
         train_config = set_train_config()
         self.experiment_logger = ExperimentLogger(logdir=train_config.log_directory,
-                                                  pipeline_config=self.pipeline.get_config(),
                                                   train_config=train_config.get_config())
         self.experiment_logger.save_current_config()
 
@@ -137,34 +132,24 @@ class BaselineTrainer:
 
     # -----------------------------  TRAINING ----------------------------------
 
-    def train_stratified_cv(self):
-        skf = StratifiedKFold(n_splits=5, shuffle=False)
-        print(self.generator.load_data())
-
-
-
-    def train(self, stratified_cv: bool):
+    def train(self):
         self.preprocess()
         self.build_model()
 
         print("-- TRAINING --")
-        if stratified_cv:
-            self.train_stratified_cv()  # Train model with stratified cross validation
+        save_best, early_stop = self.save_model()
 
-        else:
-            save_best, early_stop = self.save_model()
-            #balance data by calculating class weights and using them in fit
-            count_array = count_station_distribution(self.pipeline, self.generator.training)
-            class_weights = {idx: (1/ elem) * np.sum(count_array)/self.pipeline.get_num_stations() for idx, elem in enumerate(count_array)}
-            print(class_weights)
+        #balance data by calculating class weights and using them in fit
+        count_array = count_station_distribution(self.train_ds, self.num_stations)
+        class_weights = {idx: (1/ elem) * np.sum(count_array)/self.num_stations for idx, elem in enumerate(count_array)}
+        print(class_weights)
 
-            self.model.fit(self.generator.training,
-                      epochs=self.epochs,
-                      steps_per_epoch=self.generator.training.steps_per_epoch,
-                      validation_data=self.generator.validation,
-                      validation_steps=self.generator.validation.steps_per_epoch,
-                      callbacks=[save_best, early_stop, self.experiment_logger],
-                      class_weight=class_weights)
+        self.model.fit(self.train_ds,
+                       epochs=self.epochs,
+                       validation_data=self.val_ds,
+                       callbacks=[save_best, early_stop, self.experiment_logger],
+                       class_weight=class_weights)
 
-            best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
-            best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
+        best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
+        best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
+

@@ -89,7 +89,7 @@ def set_stations_config(station_config_nr):
         stations_config = {
             'other': 0,
             '4L': 1,
-            '4R': 2,
+            '7R': 2,
             # 'other': 3,
         }
     elif station_config_nr == 2:
