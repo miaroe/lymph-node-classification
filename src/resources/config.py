@@ -29,7 +29,7 @@ def get_num_stations(station_config_nr):
 
 # -----------------------------  TRAINING PARAMETERS ----------------------------------
 
-os.environ['CUDA_VISIBLE_DEVICES']  = "1" # whether to use GPU for training (-1 == no GPU, else GPU)
+os.environ['CUDA_VISIBLE_DEVICES']  = "0" # whether to use GPU for training (-1 == no GPU, else GPU)
 os.environ['CUDA_DEVICE_ORDER']     = "PCI_BUS_ID"
 
 perform_training    = True
@@ -38,13 +38,12 @@ batch_size          = 32
 patience            = 20
 filter_data         = False
 img_size            = 256
-station_config_nr   = 1  # class configuration (gives mapping and mapped labels)
+station_config_nr   = 2  # class configuration (gives mapping and mapped labels)
 stations_config     = get_stations_config(station_config_nr)
 num_stations        = get_num_stations(station_config_nr)
 model_arch          = "mobilenet_with_preprocessing"  # which architecture/CNN to use - see models.py for info about archs
 loss                = 'binaryCrossEntropy'
-mask_poor           = True #TODO: implement mask from config in pipeline (only placed here now to be included in config)
-mask_other          = False #TODO: implement mask from config in pipeline (only placed here now to be included in config)
+mask_poor           = False
 
 test_split          = 0.0
 validation_split    = 0.2

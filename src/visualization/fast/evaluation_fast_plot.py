@@ -83,54 +83,8 @@ def run_nn_image_classification(station_labels, data_path, model_path, model_nam
 
     fast_classification.window.run()
 
-#TODO: remove later
-def set_stations_config(station_config_nr):
-    if station_config_nr == 1:
-        stations_config = {
-            'other': 0,
-            '4L': 1,
-            '7R': 2,
-            # 'other': 3,
-        }
-    elif station_config_nr == 2:
-        stations_config = {
-            'other': 0,
-            '4L': 1,
-            '4R': 2,
-            '7L': 3,
-            '7R': 4,
-        }
-    elif station_config_nr == 3:
-        stations_config = {
-            'other': 0,
-            '4L': 1,
-            '4R': 2,
-            '7L': 3,
-            '7R': 4,
-            '10L': 5,
-            '10R': 6,
-        }
-    elif station_config_nr == 4:
-        stations_config = {
-            'other': 0,
-            '4L': 1,
-            '4R': 2,
-            '7L': 3,
-            '7R': 4,
-            '10L': 5,
-            '10R': 6,
-            '11L': 7,
-            '11R': 8,
-            '7': 9,
-        }
-    else:
-        print("Choose one of the predefined sets of stations: config_nbr={1, 2, 3, 4}")
-        exit(-1)
 
-    return stations_config
-
-
-run_nn_image_classification(station_labels=set_stations_config(station_config_nr),
+run_nn_image_classification(station_labels=get_stations_config(station_config_nr),
                             data_path=local_data_path,
                             model_path=local_model_path,
                             model_name=local_model_name,
