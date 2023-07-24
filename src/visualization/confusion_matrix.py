@@ -14,13 +14,14 @@ def confusion_matrix_and_report(model, val_ds, num_stations, stations_config, re
     pred_labels = []
 
     for batch in val_ds:
-        images, labels = batch #shape=(32, 256, 256, 3)
+        images, labels = batch #shape=(32, 256, 256, 3), shape=(32,)
 
-        pred = model.predict(images) #shape=(32, 9)
-        batch_pred_labels = np.argmax(pred, axis=1) #find predicted label for each image in batch, #has shape=(32,)
+        pred_probs = model.predict(images) #shape=(32,)
 
-        true_labels.extend(np.argmax(labels, axis=1))
-        pred_labels.extend(batch_pred_labels)
+        #need to convert the probability-based predicted labels into binary format by applying a threshold
+        pred = (pred_probs >= 0.5).astype(int).flatten()
+        true_labels.extend(labels.numpy())
+        pred_labels.extend(pred)
 
     # -------------------------------------------- FIGURE --------------------------------------------
 

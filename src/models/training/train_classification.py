@@ -90,11 +90,14 @@ class BaselineTrainer:
 
         plt.figure(figsize=(10, 10))
         class_names = list(self.stations_config.keys())
-        for images, labels in self.train_ds.take(1):
+        for images, labels in self.train_ds.take(1): #tf.Tensor([0 1 0 1 1 0 1 1 0 0 0 0 0 0 1 0 0 1 0 1 1 0 0 0 0 0 0 0 1 0 1 0], shape=(32,), dtype=int32)
             for i in range(9):
+                print('labels_ ', labels[i])
+                print(labels.numpy()[i])
+                print(class_names[labels.numpy()[i]])
                 ax = plt.subplot(3, 3, i + 1)
                 plt.imshow(images[i].numpy().astype("uint8"))
-                plt.title(class_names[np.argmax(labels[i])])
+                plt.title(class_names[labels.numpy()[i]]) #to get class label from tf.Tensor(0, shape=(), dtype=int32)
                 plt.axis("off")
         plt.show()
 
@@ -140,15 +143,15 @@ class BaselineTrainer:
         save_best, early_stop = self.save_model()
 
         #balance data by calculating class weights and using them in fit
-        count_array = count_station_distribution(self.train_ds, self.num_stations)
-        class_weights = {idx: (1/ elem) * np.sum(count_array)/self.num_stations for idx, elem in enumerate(count_array)}
-        print(class_weights)
+        #count_array = count_station_distribution(self.train_ds, self.num_stations)
+        #class_weights = {idx: (1/ elem) * np.sum(count_array)/self.num_stations for idx, elem in enumerate(count_array)}
+        #print(class_weights)
 
         self.model.fit(self.train_ds,
                        epochs=self.epochs,
                        validation_data=self.val_ds,
-                       callbacks=[save_best, early_stop, self.experiment_logger],
-                       class_weight=class_weights)
+                       callbacks=[save_best, early_stop, self.experiment_logger])
+                       #class_weight=class_weights)
 
         best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
         best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
