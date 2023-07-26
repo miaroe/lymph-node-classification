@@ -111,13 +111,6 @@ def get_arch(model_name, instance_size, num_classes):
                       outputs=x)  # example of creation of TF-Keras model using the functional API
 
     elif model_name == "mobilenet_with_preprocessing":
-        # adapted from https://www.tensorflow.org/tutorials/images/transfer_learning
-        data_augmentation = tf.keras.Sequential([
-            tf.keras.layers.RandomRotation(0.2),
-            tf.keras.layers.RandomZoom(0.2),
-            tf.keras.layers.RandomContrast(0.2)
-        ])
-        preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
 
         # Create the base model from the pre-trained model MobileNet V2
         base_model = tf.keras.applications.MobileNetV2(input_shape=instance_size,
@@ -125,14 +118,11 @@ def get_arch(model_name, instance_size, num_classes):
                                                        weights='imagenet')
         base_model.trainable = False
 
-        inputs = tf.keras.Input(shape=instance_size)
-        x = data_augmentation(inputs)
-        x = preprocess_input(x)
-        x = base_model(x, training=False)
+        x = base_model.output
         x = tf.keras.layers.GlobalAveragePooling2D()(x)
         x = tf.keras.layers.Dropout(0.2)(x)
-        outputs = Dense(num_classes, activation='softmax')(x)
-        model = tf.keras.Model(inputs, outputs)
+        x = Dense(num_classes, activation='softmax')(x)
+        model = Model(inputs=base_model.input, outputs=x)
 
 
     elif model_name == "cvc_net":
@@ -158,9 +148,21 @@ def get_arch(model_name, instance_size, num_classes):
                       outputs=x)
 
     elif model_name == "vgg16_v2":
+        data_augmentation = tf.keras.Sequential([
+            tf.keras.layers.RandomRotation(0.2),
+            tf.keras.layers.RandomZoom(0.2),
+            tf.keras.layers.RandomContrast(0.2)
+        ])
+        print('instance_size', instance_size)
+
         base_model = VGG16(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
         base_model.trainable = False
-        x = base_model.output
+        #x = base_model.output
+        inputs = tf.keras.Input(shape=instance_size)
+        x = data_augmentation(inputs)
+        x = tf.keras.applications.vgg16.preprocess_input(x)
+        x = base_model(x, training=False)
+
         x = GlobalMaxPooling2D()(x)
         x = Dense(1024, activation='relu')(x)
         x = Dropout(0.5)(x)
@@ -169,9 +171,8 @@ def get_arch(model_name, instance_size, num_classes):
         x = Dropout(0.5)(x)
         x = BatchNormalization()(x)
         x = Dense(num_classes, activation='softmax')(x)
-        model = Model(inputs=base_model.input,
-                      outputs=x)
 
+        model = Model(inputs=inputs, outputs=x)
 
 
     else:

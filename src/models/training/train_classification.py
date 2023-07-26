@@ -21,13 +21,12 @@ logger = logging.getLogger()
 def train_model(data_path, log_path, image_shape, validation_split, test_split,
                 batch_size, stations_config, num_stations, loss, model_arch,
                 instance_size, learning_rate, model_path, patience,
-                epochs):
+                epochs, augment):
 
     print("Trainer: " + model_arch)
     trainer = BaselineTrainer(data_path, log_path, image_shape, validation_split, test_split, batch_size,
                               stations_config, num_stations, loss, model_arch, instance_size,
-                              learning_rate, model_path, patience, epochs)
-
+                              learning_rate, model_path, patience, epochs, augment)
     # Perform training
     trainer.train()
 
@@ -50,7 +49,8 @@ class BaselineTrainer:
                  learning_rate: float,
                  model_path: str,
                  patience: int,
-                 epochs: int
+                 epochs: int,
+                 augment: bool
                  ):
         self.data_path = data_path
         self.log_path = log_path
@@ -67,6 +67,7 @@ class BaselineTrainer:
         self.model_path = model_path
         self.patience = patience
         self.epochs = epochs
+        self.augment = augment
 
         self.pipeline = None
         self.model = None
@@ -83,20 +84,23 @@ class BaselineTrainer:
                                                    image_shape=self.image_shape,
                                                    validation_split=self.validation_split,
                                                    station_names=list(self.stations_config.keys()),
-                                                   num_stations=self.num_stations
+                                                   num_stations=self.num_stations,
+                                                   augment=self.augment,
+                                                   stations_config=self.stations_config
                                                    )
 
         self.train_ds, self.val_ds = self.pipeline.loader_function()
 
         plt.figure(figsize=(10, 10))
         class_names = list(self.stations_config.keys())
-        for images, labels in self.train_ds.take(1):
+        for images, labels in self.train_ds.take(1): #shape=(16, 256, 256, 3), shape=(16, 9) for batch_size=16
             for i in range(9):
                 ax = plt.subplot(3, 3, i + 1)
-                plt.imshow(images[i].numpy().astype("uint8"))
+                plt.imshow(images[i])
                 plt.title(class_names[np.argmax(labels[i])])
                 plt.axis("off")
         plt.show()
+
 
     # -----------------------------  BUILDING AND SAVING MODEL ----------------------------------
 

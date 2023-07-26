@@ -24,7 +24,8 @@ def main():
                 learning_rate=learning_rate,
                 model_path=model_path,
                 patience=patience,
-                epochs=epochs)
+                epochs=epochs,
+                augment=augment)
 
     evaluate_model(trainer=trainer,
                    reports_path=reports_path,

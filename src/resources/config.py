@@ -37,18 +37,19 @@ epochs              = 100
 batch_size          = 32
 patience            = 20
 filter_data         = False
+augment             = True
 img_size            = 256
-station_config_nr   = 2  # class configuration (gives mapping and mapped labels)
+station_config_nr   = 1  # class configuration (gives mapping and mapped labels)
 stations_config     = get_stations_config(station_config_nr)
 num_stations        = get_num_stations(station_config_nr)
 model_arch          = "mobilenet_with_preprocessing"  # which architecture/CNN to use - see models.py for info about archs
-loss                = 'binaryCrossEntropy'
-mask_poor           = False
+loss                = 'categoricalCrossEntropy'
+mask_poor           = True
 
 test_split          = 0.0
-validation_split    = 0.2
+validation_split    = 0.3
 instance_size       = (img_size, img_size, 3)  # Default: (299, 299, 1). Set this to (299, 299, 1) to not downsample further.
-learning_rate       = 1e-4  # relevant for the optimizer, Adam used by default (with default lr=1e-3), I normally use 1e-4 when finetuning
+learning_rate       = 0.0001  # relevant for the optimizer, Adam used by default (with default lr=1e-3), I normally use 1e-4 when finetuning
 
 date = datetime.today().strftime('%Y-%m-%d')
 time = datetime.today().strftime('%H:%M:%S')
