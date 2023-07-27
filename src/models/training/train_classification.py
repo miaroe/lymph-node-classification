@@ -13,7 +13,7 @@ from src.resources.loss import get_loss
 from src.resources.train_config import set_train_config
 from src.data.classification_pipeline import EBUSClassificationPipeline
 from src.resources.ml_models import get_arch
-from src.utils.count_station_distribution import count_station_distribution
+from src.utils.get_class_weight import get_class_weight
 
 enable_gpu_growth()
 logger = logging.getLogger()
@@ -85,20 +85,22 @@ class BaselineTrainer:
                                                    validation_split=self.validation_split,
                                                    station_names=list(self.stations_config.keys()),
                                                    num_stations=self.num_stations,
-                                                   augment=self.augment,
-                                                   stations_config=self.stations_config
+                                                   augment=self.augment
                                                    )
 
         self.train_ds, self.val_ds = self.pipeline.loader_function()
 
+        # MULTICLASS : images: shape=(32, 256, 256, 3), labels: shape=(32, 9) for batch_size=32
+        # BINARY : labels: tf.Tensor([0 1 0 1 1 0 1 1 0 0 0 0 0 0 1 0 0 1 0 1 1 0 0 0 0 0 0 0 1 0 1 0], shape=(32,), dtype=int32)
         plt.figure(figsize=(10, 10))
         class_names = list(self.stations_config.keys())
-        for images, labels in self.train_ds.take(1): #shape=(16, 256, 256, 3), shape=(16, 9) for batch_size=16
+        for images, labels in self.train_ds.take(1):
             for i in range(9):
                 ax = plt.subplot(3, 3, i + 1)
                 plt.imshow(images[i])
-                plt.title(class_names[np.argmax(labels[i])])
                 plt.axis("off")
+                if self.num_stations > 2: plt.title(class_names[np.argmax(labels[i])])
+                else: plt.title(class_names[labels.numpy()[i]]) #to get class label from tf.Tensor(0, shape=(), dtype=int32)
         plt.show()
 
 
@@ -143,16 +145,11 @@ class BaselineTrainer:
         print("-- TRAINING --")
         save_best, early_stop = self.save_model()
 
-        #balance data by calculating class weights and using them in fit
-        count_array = count_station_distribution(self.train_ds, self.num_stations)
-        class_weights = {idx: (1/ elem) * np.sum(count_array)/self.num_stations for idx, elem in enumerate(count_array)}
-        print(class_weights)
-
         self.model.fit(self.train_ds,
                        epochs=self.epochs,
                        validation_data=self.val_ds,
                        callbacks=[save_best, early_stop, self.experiment_logger],
-                       class_weight=class_weights)
+                       class_weight=get_class_weight(self.train_ds, self.num_stations))
 
         best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
         best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))

@@ -71,7 +71,9 @@ def make_new_data_structure():
                 print(frame_number_dict)
         else:
             frame_number_dict = copy_directory(dirname, new_dir, label, frame_number_dict)
+            print("Copied: ", dirname, " to ", new_dir)
+            print(frame_number_dict)
 
 
 
-make_new_data_structure()
+#make_new_data_structure()

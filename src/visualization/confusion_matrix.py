@@ -1,10 +1,8 @@
 from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
-from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
-import tensorflow as tf
 
 plt.style.use('dark_background')
 
@@ -15,12 +13,21 @@ def confusion_matrix_and_report(model, val_ds, num_stations, stations_config, re
 
     for batch in val_ds:
         images, labels = batch #shape=(32, 256, 256, 3)
+        pred_probs = model.predict(images)
 
-        pred = model.predict(images) #shape=(32, 9)
-        batch_pred_labels = np.argmax(pred, axis=1) #find predicted label for each image in batch, #has shape=(32,)
+        #multiclass: pred_probs has shape=(32, 9)
+        if num_stations > 2:
+            batch_pred_labels = np.argmax(pred_probs, axis=1) #find predicted label for each image in batch, #has shape=(32,)
 
-        true_labels.extend(np.argmax(labels, axis=1))
-        pred_labels.extend(batch_pred_labels)
+            true_labels.extend(np.argmax(labels, axis=1))
+            pred_labels.extend(batch_pred_labels)
+
+        #binary: pred_probs has shape=(32,)
+        else:
+            # need to convert the probability-based predicted labels into binary format by applying a threshold
+            pred = (pred_probs >= 0.5).astype(int).flatten()
+            true_labels.extend(labels.numpy())
+            pred_labels.extend(pred)
 
     # -------------------------------------------- FIGURE --------------------------------------------
 

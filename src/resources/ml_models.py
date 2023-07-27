@@ -112,6 +112,9 @@ def get_arch(model_name, instance_size, num_classes):
 
     elif model_name == "mobilenet_with_preprocessing":
 
+        if num_classes > 2: prediction_layer = Dense(num_classes, activation='softmax') #multiclass
+        else: prediction_layer = Dense(1, activation='sigmoid') #binary
+
         # Create the base model from the pre-trained model MobileNet V2
         base_model = tf.keras.applications.MobileNetV2(input_shape=instance_size,
                                                        include_top=False,
@@ -121,8 +124,8 @@ def get_arch(model_name, instance_size, num_classes):
         x = base_model.output
         x = tf.keras.layers.GlobalAveragePooling2D()(x)
         x = tf.keras.layers.Dropout(0.2)(x)
-        x = Dense(num_classes, activation='softmax')(x)
-        model = Model(inputs=base_model.input, outputs=x)
+        outputs = prediction_layer(x)
+        model = Model(inputs=base_model.input, outputs=outputs)
 
 
     elif model_name == "cvc_net":
