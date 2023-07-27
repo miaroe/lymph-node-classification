@@ -38,7 +38,7 @@ class ImageClassificationWindow(object):
         self.streamer = fast.ImageFileStreamer.create(os.path.join(data_path, 'frame_#.png'), loop=True, framerate=framerate)
 
         # Neural network model
-        self.classification_model = fast.NeuralNetwork.create(os.path.join(model_path, model_name), scaleFactor=1. / 255.)
+        self.classification_model = fast.NeuralNetwork.create(os.path.join(model_path, model_name), scaleFactor=1. / 127.5)
         self.classification_model.connect(0, self.streamer)
 
         # Classification (neural network output) to Plot

@@ -1,10 +1,7 @@
 from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
-from tqdm import tqdm
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
-import tensorflow as tf
 
 plt.style.use('dark_background')
 

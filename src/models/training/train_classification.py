@@ -13,7 +13,6 @@ from src.resources.loss import get_loss
 from src.resources.train_config import set_train_config
 from src.data.classification_pipeline import EBUSClassificationPipeline
 from src.resources.ml_models import get_arch
-from src.utils.count_station_distribution import count_station_distribution
 
 enable_gpu_growth()
 logger = logging.getLogger()
@@ -21,12 +20,12 @@ logger = logging.getLogger()
 def train_model(data_path, log_path, image_shape, validation_split, test_split,
                 batch_size, stations_config, num_stations, loss, model_arch,
                 instance_size, learning_rate, model_path, patience,
-                epochs):
+                epochs, augment):
 
     print("Trainer: " + model_arch)
     trainer = BaselineTrainer(data_path, log_path, image_shape, validation_split, test_split, batch_size,
                               stations_config, num_stations, loss, model_arch, instance_size,
-                              learning_rate, model_path, patience, epochs)
+                              learning_rate, model_path, patience, epochs, augment)
 
     # Perform training
     trainer.train()
@@ -50,7 +49,8 @@ class BaselineTrainer:
                  learning_rate: float,
                  model_path: str,
                  patience: int,
-                 epochs: int
+                 epochs: int,
+                 augment: bool
                  ):
         self.data_path = data_path
         self.log_path = log_path
@@ -67,6 +67,7 @@ class BaselineTrainer:
         self.model_path = model_path
         self.patience = patience
         self.epochs = epochs
+        self.augment = augment
 
         self.pipeline = None
         self.model = None
@@ -83,7 +84,8 @@ class BaselineTrainer:
                                                    image_shape=self.image_shape,
                                                    validation_split=self.validation_split,
                                                    station_names=list(self.stations_config.keys()),
-                                                   num_stations=self.num_stations
+                                                   num_stations=self.num_stations,
+                                                   augment=self.augment
                                                    )
 
         self.train_ds, self.val_ds = self.pipeline.loader_function()
@@ -92,11 +94,8 @@ class BaselineTrainer:
         class_names = list(self.stations_config.keys())
         for images, labels in self.train_ds.take(1): #tf.Tensor([0 1 0 1 1 0 1 1 0 0 0 0 0 0 1 0 0 1 0 1 1 0 0 0 0 0 0 0 1 0 1 0], shape=(32,), dtype=int32)
             for i in range(9):
-                print('labels_ ', labels[i])
-                print(labels.numpy()[i])
-                print(class_names[labels.numpy()[i]])
                 ax = plt.subplot(3, 3, i + 1)
-                plt.imshow(images[i].numpy().astype("uint8"))
+                plt.imshow(images[i])
                 plt.title(class_names[labels.numpy()[i]]) #to get class label from tf.Tensor(0, shape=(), dtype=int32)
                 plt.axis("off")
         plt.show()
@@ -155,4 +154,3 @@ class BaselineTrainer:
 
         best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
         best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
-
