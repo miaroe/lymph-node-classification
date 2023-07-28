@@ -12,6 +12,7 @@ class ClassificationToPlot(fast.PythonProcessObject):
         super().__init__()
         self.createInputPort(0)
         self.createOutputPort(0)
+        self.frame = 0
 
         if labels is not None:
             self.labels = labels
@@ -23,10 +24,11 @@ class ClassificationToPlot(fast.PythonProcessObject):
         classification_arr = np.asarray(classification)
         print('classification_arr', classification_arr)
 
-        img_arr = plot_pred_stations(self.labels, classification_arr)
+        img_arr = plot_pred_stations(self.labels, classification_arr, self.frame)
         fast_image = fast.Image.createFromArray(img_arr)
 
         self.addOutputData(0, fast_image)
+        self.frame += 1
 
 
 class ImageClassificationWindow(object):
@@ -85,7 +87,7 @@ def run_nn_image_classification(station_labels, data_path, model_path, model_nam
 
 
 run_nn_image_classification(station_labels=get_stations_config(station_config_nr),
-                            data_path=local_data_path,
+                            data_path=local_full_video_path,
                             model_path=local_model_path,
                             model_name=local_model_name,
                             framerate=1
