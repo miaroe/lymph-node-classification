@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 from src.models.training.experimentLogger import ExperimentLogger
 from mlmia.training import enable_gpu_growth
+from sklearn.model_selection import StratifiedKFold
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import Precision, Recall
@@ -21,12 +22,12 @@ logger = logging.getLogger()
 def train_model(data_path, log_path, image_shape, validation_split, test_split,
                 batch_size, stations_config, num_stations, loss, model_arch,
                 instance_size, learning_rate, model_path, patience,
-                epochs, augment):
+                epochs, augment, stratified_cv):
 
     print("Trainer: " + model_arch)
     trainer = BaselineTrainer(data_path, log_path, image_shape, validation_split, test_split, batch_size,
                               stations_config, num_stations, loss, model_arch, instance_size,
-                              learning_rate, model_path, patience, epochs, augment)
+                              learning_rate, model_path, patience, epochs, augment, stratified_cv)
     # Perform training
     trainer.train()
 
@@ -50,7 +51,8 @@ class BaselineTrainer:
                  model_path: str,
                  patience: int,
                  epochs: int,
-                 augment: bool
+                 augment: bool,
+                 stratified_cv: bool
                  ):
         self.data_path = data_path
         self.log_path = log_path
@@ -68,6 +70,7 @@ class BaselineTrainer:
         self.patience = patience
         self.epochs = epochs
         self.augment = augment
+        self.stratified_cv = stratified_cv
 
         self.pipeline = None
         self.model = None
@@ -137,20 +140,66 @@ class BaselineTrainer:
         return save_best, early_stop
 
     # -----------------------------  TRAINING ----------------------------------
+    def train_stratified_cv(self):
+        # Stratified K-fold cross validation
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+        train_images = np.concatenate(list(self.train_ds.map(lambda x, y: x)))
+        train_labels = np.concatenate(list(self.train_ds.map(lambda x, y: y)))
+        train_labels = np.argmax(train_labels, axis=1)
+
+        val_images = np.concatenate(list(self.val_ds.map(lambda x, y: x)))
+        val_labels = np.concatenate(list(self.val_ds.map(lambda x, y: y)))
+        val_labels = np.argmax(val_labels, axis=1)
+
+        images = np.concatenate((train_images, val_images), axis=0)
+        labels = np.concatenate((train_labels, val_labels), axis=0)
+
+        # Iterate through folds
+        for fold, (train_idx, val_idx) in enumerate(skf.split(images, labels)):
+            print(f"Fold: {fold + 1}")
+
+            train_dataset = tf.data.Dataset.from_tensor_slices((images[train_idx], labels[train_idx]))
+            val_dataset = tf.data.Dataset.from_tensor_slices((images[val_idx], labels[val_idx]))
+
+            self.train_ds = train_dataset.shuffle(1024).batch(self.batch_size)
+            self.val_ds = val_dataset.batch(self.batch_size)
+
+            # Save best model and early stop
+            save_best, early_stop = self.save_model()
+
+            # Train model
+            self.model.fit(self.train_ds,
+                           epochs=self.epochs,
+                           validation_data=self.val_ds,
+                           callbacks=[save_best, early_stop, self.experiment_logger],
+                           class_weight=get_class_weight(self.train_ds, self.num_stations))
+
+            # Load best model and save it
+            best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
+            best_model.save(os.path.join(str(self.experiment_logger.logdir), f'best_model_{fold}'))
+
+
+
 
     def train(self):
         self.preprocess()
         self.build_model()
 
         print("-- TRAINING --")
-        save_best, early_stop = self.save_model()
+        # Train model with stratified cross validation
+        if self.stratified_cv:
+            self.train_stratified_cv() # Allocation of 10934550528 exceeds 10% of free system memory. Might be useful for small dataset
 
-        self.model.fit(self.train_ds,
-                       epochs=self.epochs,
-                       validation_data=self.val_ds,
-                       callbacks=[save_best, early_stop, self.experiment_logger],
-                       class_weight=get_class_weight(self.train_ds, self.num_stations))
+        else:
+            save_best, early_stop = self.save_model()
 
-        best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
-        best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
+            self.model.fit(self.train_ds,
+                           epochs=self.epochs,
+                           validation_data=self.val_ds,
+                           callbacks=[save_best, early_stop, self.experiment_logger])
+                           #class_weight=get_class_weight(self.train_ds, self.num_stations))
+
+            best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
+            best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
 
