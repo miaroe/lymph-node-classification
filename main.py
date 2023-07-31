@@ -11,21 +11,22 @@ def main():
     set_seed(42)
 
     trainer = train_model(data_path=data_path,
-                log_path = log_path,
-                image_shape=(img_size, img_size),
-                validation_split=validation_split,
-                test_split=test_split,
-                batch_size=batch_size,
-                stations_config=stations_config,
-                num_stations=num_stations,
-                loss = loss,
-                model_arch=model_arch,
-                instance_size=instance_size,
-                learning_rate=learning_rate,
-                model_path=model_path,
-                patience=patience,
-                epochs=epochs,
-                augment=augment)
+                          log_path=log_path,
+                          image_shape=(img_size, img_size),
+                          validation_split=validation_split,
+                          test_split=test_split,
+                          batch_size=batch_size,
+                          stations_config=stations_config,
+                          num_stations=num_stations,
+                          loss=loss,
+                          model_arch=model_arch,
+                          instance_size=instance_size,
+                          learning_rate=learning_rate,
+                          model_path=model_path,
+                          patience=patience,
+                          epochs=epochs,
+                          augment=augment,
+                          stratified_cv=stratified_cv)
 
     evaluate_model(trainer=trainer,
                    reports_path=reports_path,
@@ -37,7 +38,5 @@ def main():
                    compare_metrics=compare_metrics)
 
 
-
 if __name__ == "__main__":
     main()
-

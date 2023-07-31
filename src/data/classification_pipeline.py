@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 log = logging.getLogger()
 
+
 class EBUSClassificationPipeline:
 
     def __init__(self, data_path, batch_size, image_shape, validation_split, station_names, num_stations, augment):
@@ -74,8 +75,10 @@ class EBUSClassificationPipeline:
         return cropped_image
 
     def get_label_mode(self):
-        if self.num_stations > 2: label_mode = 'categorical'
-        else: label_mode = 'int'
+        if self.num_stations > 2:
+            label_mode = 'categorical'
+        else:
+            label_mode = 'int'
 
         return label_mode
 
@@ -87,13 +90,12 @@ class EBUSClassificationPipeline:
 
         data_augmentation = tf.keras.Sequential([
             tf.keras.layers.RandomRotation(0.1),  # rotating by a random amount in the range [-10% * 2pi, 10% * 2pi]
-            tf.keras.layers.RandomFlip("horizontal"),
             tf.keras.layers.RandomContrast(0.1)  # (x - mean) * contrast_factor + mean
         ])
 
         resize_and_rescale = tf.keras.Sequential([
             tf.keras.layers.Resizing(256, 256),
-            tf.keras.layers.Rescaling(1. / 127.5, offset=-1) # specific for mobilenet TODO: change for other models
+            tf.keras.layers.Rescaling(1. / 127.5, offset=-1)  # specific for mobilenet TODO: change for other models
 
         ])
         # Apply cropping

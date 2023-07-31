@@ -11,6 +11,7 @@ from src.visualization.station_distribution import station_distribution_figure_a
 from src.visualization.compare_metrics import plot_compare_metrics
 from src.resources.train_config import get_config
 
+
 # -----------------------------  EVALUATING ----------------------------------
 def evaluate_model(trainer, reports_path, model_path, learning_curve, conf_matrix, model_layout,
                    station_distribution, compare_metrics):
@@ -21,13 +22,15 @@ def evaluate_model(trainer, reports_path, model_path, learning_curve, conf_matri
     config = get_config(config_path)
     train_config = config["train_config"]
 
-    model = get_arch(train_config.get('model_arch'), train_config.get('instance_size'), train_config.get('num_stations'))
-    model.compile(loss=get_loss(train_config.get('loss')), optimizer='adam', metrics=['accuracy', Precision(), Recall()])
+    model = get_arch(train_config.get('model_arch'), train_config.get('instance_size'),
+                     train_config.get('num_stations'))
+    model.compile(loss=get_loss(train_config.get('loss')), optimizer='adam',
+                  metrics=['accuracy', Precision(), Recall()])
     model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_partial()
 
     score = model.evaluate(trainer.val_ds,
-                               return_dict=True
-                               )
+                           return_dict=True
+                           )
     print(f'{"Metric":<12}{"Value"}')
     for metric, value in score.items():
         print(f'{metric:<12}{value:<.4f}')
@@ -46,13 +49,13 @@ def evaluate_model(trainer, reports_path, model_path, learning_curve, conf_matri
 
     # save confusion matrix to src/reports/figures and save classification report to src/reports
     if conf_matrix:
-        confusion_matrix_and_report(model, trainer.val_ds, train_config.get('num_stations'), train_config.get('stations_config'),
+        confusion_matrix_and_report(model, trainer.val_ds, train_config.get('num_stations'),
+                                    train_config.get('stations_config'),
                                     reports_path)
 
     if compare_metrics:
         current_dir = get_latest_date_time('/home/miaroe/workspace/lymph-node-classification/output/models/')
         model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in
-                      [current_dir]] # to compare multiple models, add more paths manually
-        model_names = [trainer.model_arch] #saved in filename
+                       [current_dir]]  # to compare multiple models, add more paths manually
+        model_names = [trainer.model_arch]  # saved in filename
         plot_compare_metrics(model_paths, model_names, reports_path)
-
