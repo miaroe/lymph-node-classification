@@ -89,26 +89,21 @@ def get_arch(model_name, instance_size, num_classes):
         model = Model(inputs=base_model.input, outputs=[y1, y2])  # example of multi-task network through the functional API
 
     elif model_name == "mobilenet":
-        # MobileNetV2
-        # For now copied recipe from above and replaced model with MobileNetV2
+        # Create the base model from the pre-trained model MobileNet V2
+        base_model = tf.keras.applications.MobileNetV2(input_shape=instance_size,
+                                                       include_top=False,
+                                                       weights='imagenet')
+        base_model.trainable = False
+
+        # add preprocessing layer to the front of MobileNetV2
         some_input = Input(shape=instance_size)
-        base_model = MobileNetV2(
-            #input_shape=None, alpha=1.0,
-            include_top=False, weights="imagenet",
-            input_tensor=some_input, pooling=None,
-            #classes=1000, classifier_activation="softmax",
-        )
-        #base_model = InceptionV3(include_top=False, weights="imagenet", pooling=None, input_tensor=some_input)
-        base_model.trainable = False    # Freeze model
-        x = base_model.output
-        x = Flatten()(x)
-        x = Dense(64)(x)
-        x = BatchNormalization()(x)
-        x = Dropout(0.5)(x)
-        x = Activation('relu')(x)
+        x = tf.keras.applications.mobilenet_v2.preprocess_input(some_input) # returns [-1,1] normalized input
+
+        x = base_model(x, training=False)
+        x = tf.keras.layers.GlobalAveragePooling2D()(x)
+        x = tf.keras.layers.Dropout(0.2)(x)
         x = Dense(num_classes, activation='softmax')(x)
-        model = Model(inputs=base_model.input,
-                      outputs=x)  # example of creation of TF-Keras model using the functional API
+        model = Model(inputs=some_input, outputs=x)
 
     elif model_name == "cvc_net":
 
@@ -137,9 +132,6 @@ def get_arch(model_name, instance_size, num_classes):
         base_model.trainable = False
         x = base_model.output
         x = GlobalMaxPooling2D()(x)
-        x = Dense(1024, activation='relu')(x)
-        x = Dropout(0.5)(x)
-        x = BatchNormalization()(x)
         x = Dense(512, activation='relu')(x)
         x = Dropout(0.5)(x)
         x = BatchNormalization()(x)

@@ -4,7 +4,7 @@ import logging
 import numpy as np
 from mlmia import DatasetPipeline, TaskType
 
-from src.data.DB_image_quality import get_sequence_quality_map
+from src.data.db_image_quality import get_sequence_quality_map
 from src.utils.importers import load_png_file, bilateral_filter
 
 log = logging.getLogger()
@@ -12,7 +12,7 @@ log = logging.getLogger()
 
 class EBUSClassificationPipeline(DatasetPipeline):
 
-    def __init__(self, image_shape=(256, 256), station_config_nr=1, *args, **kwargs): #TODO: make sure station_config_nr i set from config
+    def __init__(self, image_shape=(256, 256), station_config_nr=4, *args, **kwargs): #TODO: make sure station_config_nr i set from config
         super().__init__(*args, **kwargs)
 
         self.folder_pattern = ["subjects", "stations", "frames"]
@@ -30,7 +30,7 @@ class EBUSClassificationPipeline(DatasetPipeline):
         self.num_stations = self.get_num_stations()
 
         self.mask_poor = False # set to True to mask out poor quality images
-        self.mask_other = True # set to True to mask out images not in station config
+        self.mask_other = False # set to True to mask out images not in station config
 
     def loader_function(self, filepath, index=None, *args, **kwargs):
 
@@ -47,6 +47,7 @@ class EBUSClassificationPipeline(DatasetPipeline):
 
         # Normalize image
         inputs = (img[..., None]/255.0).astype(np.float32)
+
         inputs = inputs * np.ones(shape=(*img.shape, 3)) # 3 ch as input to classification network
         inputs = inputs.astype(np.float32)
 
@@ -106,16 +107,15 @@ class EBUSClassificationPipeline(DatasetPipeline):
             }
         elif config_nr == 4:
             self.stations_config = {
-                'other': 0,
-                '4L': 1,
-                '4R': 2,
-                '7L': 3,
-                '7R': 4,
-                '10L': 5,
-                '10R': 6,
-                '11L': 7,
-                '11R': 8,
-                '7': 9,
+                '4L': 0,
+                '4R': 1,
+                '7L': 2,
+                '7R': 3,
+                '10L': 4,
+                '10R': 5,
+                '11L': 6,
+                '11R': 7,
+                '7': 8,
             }
         else:
             print("Choose one of the predefined sets of stations: config_nbr={1, 2, 3, 4}")

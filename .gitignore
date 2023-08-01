@@ -1,4 +1,4 @@
-.idea
+lymph-node-classification/.idea
 .DS_Store
 
 # Environments
@@ -11,5 +11,5 @@ environment/
 *.json
 
 # Folders
-output/
-data/
+lymph-node-classfication/output/
+lymph-node-classfication/data/

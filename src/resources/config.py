@@ -3,10 +3,10 @@ import os
 
 # -----------------------------  TRAINING PARAMETERS ----------------------------------
 
-os.environ['CUDA_VISIBLE_DEVICES']  = "2" # whether to use GPU for training (-1 == no GPU, else GPU)
+os.environ['CUDA_VISIBLE_DEVICES']  = "0" # whether to use GPU for training (-1 == no GPU, else GPU)
 os.environ['CUDA_DEVICE_ORDER']     = "PCI_BUS_ID"
 
-perform_training    = False
+perform_training    = True
 stratified_cv       = False # only accessed if perform_training = True
 epochs              = 100
 batch_size          = 32
@@ -15,12 +15,12 @@ tf_dataset          = True
 augment_data        = True
 filter_data         = False
 img_size            = 256
-station_config_nr   = 1  # class configuration (gives mapping and mapped labels)
-model_arch          = "vgg16"  # which architecture/CNN to use - see models.py for info about archs
+station_config_nr   = 4  # class configuration (gives mapping and mapped labels)
+model_arch          = "vgg16_v2"  # which architecture/CNN to use - see models.py for info about archs
 split_by            = 'stations'
-loss                = 'maskedCategoricalCrossEntropy'
+loss                = 'categoricalCrossEntropy'
 mask_poor           = False #TODO: implement mask from config in pipeline (only placed here now to be included in config)
-mask_other          = True #TODO: implement mask from config in pipeline (only placed here now to be included in config)
+mask_other          = False #TODO: implement mask from config in pipeline (only placed here now to be included in config)
 
 test_split          = 0.0
 validation_split    = 0.2
