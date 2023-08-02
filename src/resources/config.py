@@ -6,7 +6,7 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES']  = "0" # whether to use GPU for training (-1 == no GPU, else GPU)
 os.environ['CUDA_DEVICE_ORDER']     = "PCI_BUS_ID"
 
-perform_training    = True
+perform_training    = False
 stratified_cv       = False # only accessed if perform_training = True
 epochs              = 100
 batch_size          = 32
@@ -35,13 +35,13 @@ time = datetime.today().strftime('%H:%M:%S')
 # use pre-trained model by changing perform_training to False
 # and setting the date and time of the model you want to use
 if perform_training == False:
-    date            = '2023-07-04'
-    time            = '14:58:42'
+    date            = '2023-08-01'
+    time            = '10:42:02'
 
-learning_curve          = True
-conf_matrix             = True
-model_layout            = True
-station_distribution    = True
+learning_curve          = False
+conf_matrix             = False
+model_layout            = False
+station_distribution    = False
 compare_metrics         = True
 
 

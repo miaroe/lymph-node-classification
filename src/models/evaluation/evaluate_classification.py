@@ -58,8 +58,12 @@ def evaluate_model(reports_path, model_path, learning_curve, conf_matrix, model_
         station_distribution_figure_and_report(pipeline, batch_generator, reports_path)
 
     if compare_metrics:
+        '''
         model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in
                       ['2023-06-30/13:11:05', '2023-06-30/13:28:00', '2023-06-30/14:19:33', '2023-06-30/11:55:19', '2023-06-30/10:38:40', '2023-06-30/11:12:17']]
         model_names = ['resnet', 'cvc_net', 'basic', 'vgg16', 'vgg16_v2', 'inception'] #saved in filename
-        plot_compare_metrics(model_paths, model_names, reports_path)
+        '''
+        model_path = ['/home/miaroe/workspace/lymph-node-classification/output/models/2023-08-01/10:42:02']
+        model_name = ['vgg16_v2']
+        plot_compare_metrics(model_path, model_name, reports_path)
 
