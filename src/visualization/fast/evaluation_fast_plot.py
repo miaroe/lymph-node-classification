@@ -1,10 +1,20 @@
 import fast
 import numpy as np
+import pickle
 from src.resources.config import *
 from src.visualization.predicted_stations import plot_pred_stations
 
+
 fast.Reporter.setGlobalReportMethod(fast.Reporter.COUT) # Uncomment to show debug info
 
+frame_pred_dict = pickle.load(open(os.path.join(local_full_video_path, "frame_pred_dict.pickle"), "rb"))
+'''
+station_labels = get_stations_config(station_config_nr)
+for key in frame_pred_dict:
+    pred_m = frame_pred_dict[key]
+    pred_l = list(station_labels.keys())[np.argmax(pred_m)]
+    print(f'frame: {key}, prediction: {pred_l}')
+'''
 
 class ClassificationToPlot(fast.PythonProcessObject):
 
@@ -23,6 +33,13 @@ class ClassificationToPlot(fast.PythonProcessObject):
         classification = self.getInputData(0)
         classification_arr = np.asarray(classification)
         print('classification_arr', classification_arr)
+
+        prediction_arr = frame_pred_dict[f'frame_{self.frame}.png']
+        prediction_label = self.labels[np.argmax(prediction_arr)]
+
+        print('prediction_arr', prediction_arr)
+        print('prediction_label', prediction_label)
+        print('prediction value', prediction_arr[0][np.argmax(prediction_arr)])
 
         img_arr = plot_pred_stations(self.labels, classification_arr, self.frame)
         fast_image = fast.Image.createFromArray(img_arr)
@@ -92,5 +109,3 @@ run_nn_image_classification(station_labels=get_stations_config(station_config_nr
                             model_name=local_model_name,
                             framerate=1
                             )
-
-

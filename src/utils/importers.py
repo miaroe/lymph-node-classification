@@ -20,7 +20,7 @@ class PNGImporter(ImageImporter):
         super(PNGImporter, self).__init__(filepath, *args, **kwargs)
 
     def load_image(self, filepath):
-        img = cv2.imread(filepath, 0) #returns empty matrix if file cannot be read, shape is (1080, 1920)
+        img = cv2.imread(filepath, cv2.IMREAD_COLOR) #returns empty matrix if file cannot be read, shape is (1080, 1920)
         return img
 
 

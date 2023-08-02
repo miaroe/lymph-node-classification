@@ -18,6 +18,8 @@ def plot_pred_stations(station_labels, pred, frame):
         pred_max_i = np.argsort(pred)[::-1][:3]  # index of top three predictions
         frame_label_dict = get_frame_label_dict()
         frame = 'frame_' + str(frame)
+        print('fast_pred: ', station_labels[np.argmax(pred)])
+        print('fast_pred value: ', pred[np.argmax(pred)])
         for i in pred_max_i:
             plt.bar(station_labels[i], pred[i])
         plt.title(frame + '\n' + 'True label: ' + frame_label_dict[frame])
