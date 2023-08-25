@@ -1,8 +1,11 @@
+import os
 import sqlite3
 import pandas as pd
 import shutil
+
 from src.resources.config import *
 from db_image_quality import get_sequence_quality_map
+from alive_progress import alive_bar
 
 
 # https://www.geeksforgeeks.org/python-os-rename-method/
@@ -42,9 +45,13 @@ def copy_directory(src_dir, dst_dir, label, frame_number_dict):
         raise Exception("Directory does not exist")
 
 
-# to make new data structure from EBUS_Levanger directory as source, delete existing
-# EBUS_Levanger_new and call this function
-def make_new_data_structure():
+# to make new data structure from EBUS_Levanger directory as source
+# EBUS_Levanger_new and call this function. It is possible to generate a test dataset from this in make_test_ds.py
+def make_EBUS_Levanger_baseline():
+    # remove old data structure
+    if os.path.exists(data_path):
+        shutil.rmtree(data_path)
+
     frame_number_dict = {'4L': 0,
                          '4R': 0,
                          '7L': 0,
@@ -73,12 +80,39 @@ def make_new_data_structure():
                 print("Copied: ", dirname, " to ", new_dir)
                 print(frame_number_dict)
         else:
+            print(dirname, " to ", new_dir)
             frame_number_dict = copy_directory(dirname, new_dir, label, frame_number_dict)
             print("Copied: ", dirname, " to ", new_dir)
             print(frame_number_dict)
 
-#make_new_data_structure()
 
+make_EBUS_Levanger_baseline()
+
+
+def make_EBUS_Levanger_sequence():
+    data_path_standard = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Levanger'
+    # copy all images from the source directory to destination directory data_path
+    # add alive progress bar
+    with alive_bar(len(os.listdir(data_path_standard)), title='new directory', bar='bubbles', spinner='fishes') as bar:
+        for dirname in os.listdir(data_path_standard):
+            new_dir = os.path.join(data_path, dirname)
+            if not os.path.exists(new_dir):
+                os.makedirs(new_dir)
+            for filename in os.listdir(os.path.join(data_path_standard, dirname)):
+                filename_new = filename.split('_')[1]
+                src = os.path.join(data_path_standard, dirname, filename)
+                dst = os.path.join(new_dir, filename_new)
+                if not os.path.exists(dst):
+                    os.makedirs(dst)
+                for file in os.listdir(src):
+                    shutil.copyfile(os.path.join(src, file), os.path.join(dst, file))
+            bar()
+
+
+# make_EBUS_Levanger_sequence()
+
+
+# This function is used to balance the dataset by deleting frames from the folders with the most frames
 def balance_dataset(root_folder):
     # Step 1: Find the folder with the least number of frames
     min_frames = float('inf')
@@ -103,4 +137,4 @@ def balance_dataset(root_folder):
                     frame_to_delete_path = os.path.join(folder_path, frame_to_delete)
                     os.remove(frame_to_delete_path)
 
-#balance_dataset(data_path)
+# balance_dataset(data_path)
