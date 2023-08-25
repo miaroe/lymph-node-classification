@@ -20,6 +20,7 @@ def main():
                           stations_config=stations_config,
                           num_stations=num_stations,
                           loss=loss,
+                          model_type=model_type,
                           model_arch=model_arch,
                           instance_size=instance_size,
                           learning_rate=learning_rate,
@@ -27,7 +28,8 @@ def main():
                           patience=patience,
                           epochs=epochs,
                           augment=augment,
-                          stratified_cv=stratified_cv)
+                          stratified_cv=stratified_cv,
+                          seq_length=seq_length)
 
     evaluate_model(trainer=trainer,
                    reports_path=reports_path,

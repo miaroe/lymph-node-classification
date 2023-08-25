@@ -14,8 +14,7 @@ from tensorflow.keras.layers import PReLU
 # see here for already built-in pretrained architectures:
 # https://keras.io/api/applications/
 
-def get_arch(model_name, instance_size, num_classes):
-
+def get_arch(model_name, instance_size, num_classes, seq_length):
     # basic
     if model_name == "basic":
         # define model (some naive network)
@@ -47,7 +46,8 @@ def get_arch(model_name, instance_size, num_classes):
         x = Dropout(0.5)(x)
         x = Activation('relu')(x)
         x = Dense(num_classes, activation='softmax')(x)
-        model = Model(inputs=base_model.input, outputs=x)  # example of creation of TF-Keras model using the functional API
+        model = Model(inputs=base_model.input,
+                      outputs=x)  # example of creation of TF-Keras model using the functional API
 
     elif model_name == "resnet":
         # ResNet-50, another very popular arch, can be done similarly as for InceptionV3 above
@@ -86,20 +86,21 @@ def get_arch(model_name, instance_size, num_classes):
         y2 = Activation('relu')(y2)
         y2 = Dense(num_classes[1], activation='softmax', name="cl2")(y2)
 
-        model = Model(inputs=base_model.input, outputs=[y1, y2])  # example of multi-task network through the functional API
+        model = Model(inputs=base_model.input,
+                      outputs=[y1, y2])  # example of multi-task network through the functional API
 
     elif model_name == "mobilenet":
         # MobileNetV2
         # For now copied recipe from above and replaced model with MobileNetV2
         some_input = Input(shape=instance_size)
         base_model = MobileNetV2(
-            #input_shape=None, alpha=1.0,
+            # input_shape=None, alpha=1.0,
             include_top=False, weights="imagenet",
             input_tensor=some_input, pooling=None,
-            #classes=1000, classifier_activation="softmax",
+            # classes=1000, classifier_activation="softmax",
         )
-        #base_model = InceptionV3(include_top=False, weights="imagenet", pooling=None, input_tensor=some_input)
-        base_model.trainable = False    # Freeze model
+        # base_model = InceptionV3(include_top=False, weights="imagenet", pooling=None, input_tensor=some_input)
+        base_model.trainable = False  # Freeze model
         x = base_model.output
         x = Flatten()(x)
         x = Dense(64)(x)
@@ -112,8 +113,10 @@ def get_arch(model_name, instance_size, num_classes):
 
     elif model_name == "mobilenet_with_preprocessing":
 
-        if num_classes > 2: prediction_layer = Dense(num_classes, activation='softmax') #multiclass
-        else: prediction_layer = Dense(1, activation='sigmoid') #binary
+        if num_classes > 2:
+            prediction_layer = Dense(num_classes, activation='softmax')  # multiclass
+        else:
+            prediction_layer = Dense(1, activation='sigmoid')  # binary
 
         # Create the base model from the pre-trained model MobileNet V2
         base_model = tf.keras.applications.MobileNetV2(input_shape=instance_size,
@@ -131,7 +134,7 @@ def get_arch(model_name, instance_size, num_classes):
     elif model_name == "cvc_net":
 
         base_model = CVCNet(include_top=False, input_shape=instance_size, classes=num_classes)
-        #base_model.trainable = False
+        # base_model.trainable = False
         x = base_model.output
         x = Conv2D(num_classes, (1, 1))(x)
         x = PReLU()(x)
@@ -150,38 +153,49 @@ def get_arch(model_name, instance_size, num_classes):
         model = Model(inputs=base_model.input,
                       outputs=x)
 
+
     elif model_name == "vgg16_v2":
-        data_augmentation = tf.keras.Sequential([
-            tf.keras.layers.RandomRotation(0.2),
-            tf.keras.layers.RandomZoom(0.2),
-            tf.keras.layers.RandomContrast(0.2)
-        ])
-        print('instance_size', instance_size)
 
         base_model = VGG16(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
         base_model.trainable = False
-        #x = base_model.output
-        inputs = tf.keras.Input(shape=instance_size)
-        x = data_augmentation(inputs)
-        x = tf.keras.applications.vgg16.preprocess_input(x)
-        x = base_model(x, training=False)
 
+        x = base_model.output
         x = GlobalMaxPooling2D()(x)
-        x = Dense(1024, activation='relu')(x)
-        x = Dropout(0.5)(x)
-        x = BatchNormalization()(x)
         x = Dense(512, activation='relu')(x)
         x = Dropout(0.5)(x)
         x = BatchNormalization()(x)
         x = Dense(num_classes, activation='softmax')(x)
+        model = Model(inputs=base_model.input,
+                      outputs=x)
 
-        model = Model(inputs=inputs, outputs=x)
+    elif model_name == 'cnn-lstm':
+        print('cnn-lstm')
+
+        # Create the base model from the pre-trained model MobileNet V2
+        base_model = tf.keras.applications.MobileNetV2(input_shape=instance_size,
+                                                       include_top=False,
+                                                       weights='imagenet')
+        for layer in base_model.layers:  # freeze all layers
+            layer.trainable = False
+
+        model = Sequential()
+        # define CNN model
+        lstm_input_shape = [seq_length] + list(instance_size)
+
+        model.add(TimeDistributed(base_model, input_shape=tuple(lstm_input_shape)))
+
+        # define LSTM model
+        model.add(TimeDistributed(Flatten()))  # (B, T, C)
+        model.add(LSTM(32, activation='relu', return_sequences=False))
+        model.add(Dense(32, activation='relu'))
+        model.add(Dropout(.5))
+        model.add(Dense(num_classes, activation='softmax'))
+
 
 
     else:
         print("please choose supported models: {basic, inception, resnet, inception_multi-task, mobilenet,"
-              "cvc_net, vgg16}")
+              "cvc_net, vgg16, cnn-lstm}")
         exit()
 
     return model
-

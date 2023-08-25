@@ -47,6 +47,7 @@ class BaselineTrainer:
                  stations_config: dict,
                  num_stations: int,
                  loss: str,
+                 model_type: str,
                  model_arch: str,
                  instance_size: tuple,
                  learning_rate: float,
@@ -54,7 +55,8 @@ class BaselineTrainer:
                  patience: int,
                  epochs: int,
                  augment: bool,
-                 stratified_cv: bool
+                 stratified_cv: bool,
+                 seq_length: int
                  ):
         self.data_path = data_path
         self.test_ds_path = test_ds_path
@@ -66,6 +68,7 @@ class BaselineTrainer:
         self.stations_config = stations_config
         self.num_stations = num_stations
         self.loss = loss
+        self.model_type = model_type
         self.model_arch = model_arch
         self.instance_size = instance_size
         self.learning_rate = learning_rate
@@ -74,6 +77,7 @@ class BaselineTrainer:
         self.epochs = epochs
         self.augment = augment
         self.stratified_cv = stratified_cv
+        self.seq_length = seq_length
 
         self.pipeline = None
         self.model = None
@@ -82,40 +86,79 @@ class BaselineTrainer:
         self.val_ds = None
         self.test_ds = None
 
-    #-----------------------------  PREPROCESSING ----------------------------------
+    # -----------------------------  PREPROCESSING ----------------------------------
 
     # Set up pipeline
     def preprocess(self):
-        self.pipeline = EBUSClassificationPipeline(data_path=self.data_path,
-                                                   batch_size=self.batch_size,
-                                                   image_shape=self.image_shape,
-                                                   validation_split=self.validation_split,
-                                                   station_names=list(self.stations_config.keys()),
-                                                   num_stations=self.num_stations,
-                                                   augment=self.augment
-                                                   )
+        if self.model_type == "baseline":
+            self.pipeline = BaselineClassificationPipeline(data_path=self.data_path,
+                                                           test_ds_path=self.test_ds_path,
+                                                           batch_size=self.batch_size,
+                                                           image_shape=self.image_shape,
+                                                           validation_split=self.validation_split,
+                                                           test_split=self.test_split,
+                                                           station_names=list(self.stations_config.keys()),
+                                                           num_stations=self.num_stations,
+                                                           augment=self.augment,
+                                                           shuffle=True
+                                                           )
+            self.train_ds, self.val_ds, self.test_ds = self.pipeline.loader_function()
 
-        self.train_ds, self.val_ds = self.pipeline.loader_function()
+            # MULTICLASS : images: shape=(32, 256, 256, 3), labels: shape=(32, 9) for batch_size=32
+            # BINARY : labels: tf.Tensor([0 1 0 1 1 0 1 1 0 0 0 0 0 0 1 0 0 1 0 1 1 0 0 0 0 0 0 0 1 0 1 0], shape=(32,), dtype=int32)
+            plt.figure(figsize=(10, 10))
+            for images, labels in self.train_ds.take(1):
+                for i in range(9):
+                    ax = plt.subplot(3, 3, i + 1)
+                    plt.imshow(images[i])
+                    plt.axis("off")
+                    if self.num_stations > 2:
+                        plt.title(self.pipeline.station_names[np.argmax(labels[i])])
+                    else:
+                        plt.title(
+                            self.pipeline.station_names[labels.numpy()[i]])  # to get class label from tf.Tensor(0, shape=(), dtype=int32)
+            plt.show()
 
-        # MULTICLASS : images: shape=(32, 256, 256, 3), labels: shape=(32, 9) for batch_size=32
-        # BINARY : labels: tf.Tensor([0 1 0 1 1 0 1 1 0 0 0 0 0 0 1 0 0 1 0 1 1 0 0 0 0 0 0 0 1 0 1 0], shape=(32,), dtype=int32)
-        plt.figure(figsize=(10, 10))
-        class_names = list(self.stations_config.keys())
-        for images, labels in self.train_ds.take(1):
-            for i in range(9):
-                ax = plt.subplot(3, 3, i + 1)
-                plt.imshow(images[i])
-                plt.axis("off")
-                if self.num_stations > 2: plt.title(class_names[np.argmax(labels[i])])
-                else: plt.title(class_names[labels.numpy()[i]]) #to get class label from tf.Tensor(0, shape=(), dtype=int32)
-        plt.show()
+        elif self.model_type == "sequence":
+            self.pipeline = SequenceClassificationPipeline(data_path=self.data_path,
+                                                           test_ds_path=self.test_ds_path,
+                                                           batch_size=self.batch_size,
+                                                           image_shape=self.image_shape,
+                                                           validation_split=self.validation_split,
+                                                           test_split=self.test_split,
+                                                           station_names=list(self.stations_config.keys()),
+                                                           num_stations=self.num_stations,
+                                                           augment=self.augment,
+                                                           shuffle=False,
+                                                           stations_config=self.stations_config,
+                                                           seq_length=self.seq_length
+                                                           )
 
+            self.train_ds, self.val_ds = self.pipeline.loader_function()
+
+            # MULTICLASS : images: shape=(32, 10, 256, 256, 3), labels: shape=(32, 9) for batch_size=32
+
+            # plotting the 6 first frames of the first sequence in the first batch
+            batch = self.train_ds.take(1)
+            for i, (images, labels) in enumerate(batch):
+                print(images.shape)
+                print(labels.shape)
+                print(images[0].shape)
+
+                plt.figure(figsize=(10, 10))
+                for j in range(6):
+                    ax = plt.subplot(2, 3, j + 1)
+                    plt.imshow(images[0][j])
+                    plt.title(f"Frame {j}, Label: {self.pipeline.station_names[np.argmax(labels[0][j])]}")
+                    plt.axis("off")
+                plt.tight_layout()
+                plt.show()
 
     # -----------------------------  BUILDING AND SAVING MODEL ----------------------------------
 
     def build_model(self):
 
-        self.model = get_arch(self.model_arch, self.instance_size, self.num_stations)
+        self.model = get_arch(self.model_arch, self.instance_size, self.num_stations, self.seq_length)
         print(self.model.summary())
 
         self.model.compile(
@@ -144,6 +187,7 @@ class BaselineTrainer:
         return save_best, early_stop
 
     # -----------------------------  TRAINING ----------------------------------
+    # Not used at the moment, TODO: remove?
     def train_stratified_cv(self):
         # Stratified K-fold cross validation
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
@@ -183,9 +227,6 @@ class BaselineTrainer:
             best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
             best_model.save(os.path.join(str(self.experiment_logger.logdir), f'best_model_{fold}'))
 
-
-
-
     def train(self):
         self.preprocess()
         self.build_model()
@@ -193,7 +234,7 @@ class BaselineTrainer:
         print("-- TRAINING --")
         # Train model with stratified cross validation
         if self.stratified_cv:
-            self.train_stratified_cv() # Allocation of 10934550528 exceeds 10% of free system memory. Might be useful for small dataset
+            self.train_stratified_cv()  # Allocation of 10934550528 exceeds 10% of free system memory. Might be useful for small dataset
 
         else:
             save_best, early_stop = self.save_model()
@@ -202,8 +243,7 @@ class BaselineTrainer:
                            epochs=self.epochs,
                            validation_data=self.val_ds,
                            callbacks=[save_best, early_stop, self.experiment_logger])
-                           #class_weight=get_class_weight(self.train_ds, self.num_stations))
+            # class_weight=get_class_weight(self.train_ds, self.num_stations))
 
             best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
             best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
-
