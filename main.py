@@ -31,6 +31,7 @@ def main():
     evaluate_model(trainer=trainer,
                    reports_path=reports_path,
                    model_path=model_path,
+                   visualize_predictions=visualize_predictions,
                    learning_curve=learning_curve,
                    conf_matrix=conf_matrix,
                    model_layout=model_layout,
