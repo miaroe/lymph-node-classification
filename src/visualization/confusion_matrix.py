@@ -31,7 +31,6 @@ def confusion_matrix_and_report(model, val_ds, num_stations, stations_config, re
 
     # -------------------------------------------- FIGURE --------------------------------------------
 
-    #does not include 'other' class
     cm = confusion_matrix(true_labels, pred_labels)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm,
                                   display_labels=list(stations_config.keys()))

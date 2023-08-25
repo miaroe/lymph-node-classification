@@ -7,6 +7,8 @@ def count_station_distribution(dataset, num_stations):
 
     for _, labels in dataset:
         for label in labels:
-            count_array[label.numpy().argmax()] += 1
-
+            if num_stations > 2:
+                count_array[label.numpy().argmax()] += 1
+            else:
+                count_array[label.numpy()] += 1
     return count_array

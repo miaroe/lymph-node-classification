@@ -3,9 +3,9 @@ import os
 import pandas as pd
 
 
-def get_frame_label_dict():
+def get_frame_label_dict(full_video_path):
     frame_label_dict = {}
-    labels_path = os.path.join(local_full_video_path, 'labels.csv')
+    labels_path = os.path.join(full_video_path, 'labels.csv')
     # read the csv file using pandas
     df = pd.read_csv(labels_path, sep=';')
 
@@ -17,4 +17,4 @@ def get_frame_label_dict():
     return frame_label_dict
 
 
-get_frame_label_dict()
+#get_frame_label_dict(local_full_video_path)

@@ -17,6 +17,9 @@ def crop_all_images():
             img = tf.image.decode_png(img, channels=3)
             img = img[100:1035, 530:1658]
 
+            #resize
+            img = tf.image.resize(img, [256, 256])
+
             tf.io.write_file(os.path.join(local_full_video_path, image_name), tf.image.encode_png(img))
             print(image_name, "cropped")
 
