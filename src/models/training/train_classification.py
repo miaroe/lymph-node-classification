@@ -12,31 +12,33 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import Precision, Recall
 from src.resources.loss import get_loss
 from src.resources.train_config import set_train_config
-from src.data.classification_pipeline import EBUSClassificationPipeline
+from src.data.classification_pipeline import BaselineClassificationPipeline, SequenceClassificationPipeline
 from src.resources.ml_models import get_arch
 from src.utils.get_class_weight import get_class_weight
 
 enable_gpu_growth()
 logger = logging.getLogger()
 
-def train_model(data_path, log_path, image_shape, validation_split, test_split,
-                batch_size, stations_config, num_stations, loss, model_arch,
-                instance_size, learning_rate, model_path, patience,
-                epochs, augment, stratified_cv):
 
+def train_model(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
+                batch_size, stations_config, num_stations, loss, model_type, model_arch,
+                instance_size, learning_rate, model_path, patience,
+                epochs, augment, stratified_cv, seq_length):
     print("Trainer: " + model_arch)
-    trainer = BaselineTrainer(data_path, log_path, image_shape, validation_split, test_split, batch_size,
-                              stations_config, num_stations, loss, model_arch, instance_size,
-                              learning_rate, model_path, patience, epochs, augment, stratified_cv)
+    trainer = BaselineTrainer(data_path, test_ds_path, log_path, image_shape, validation_split, test_split, batch_size,
+                              stations_config, num_stations, loss, model_type, model_arch, instance_size,
+                              learning_rate, model_path, patience, epochs, augment, stratified_cv, seq_length)
     # Perform training
     trainer.train()
 
     return trainer
 
+
 class BaselineTrainer:
 
     def __init__(self,
                  data_path: str,
+                 test_ds_path: str,
                  log_path: str,
                  image_shape: tuple,
                  validation_split: float,
@@ -55,6 +57,7 @@ class BaselineTrainer:
                  stratified_cv: bool
                  ):
         self.data_path = data_path
+        self.test_ds_path = test_ds_path
         self.log_path = log_path
         self.image_shape = image_shape
         self.validation_split = validation_split
@@ -77,6 +80,7 @@ class BaselineTrainer:
         self.callbacks = None
         self.train_ds = None
         self.val_ds = None
+        self.test_ds = None
 
     #-----------------------------  PREPROCESSING ----------------------------------
 

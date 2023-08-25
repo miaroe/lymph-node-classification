@@ -1,23 +1,37 @@
 import logging
 import tensorflow as tf
+import os
 import numpy as np
 import matplotlib.pyplot as plt
+from alive_progress import alive_bar, config_handler
+from sklearn.model_selection import train_test_split
+
+from src.data.full_video_label_dict import get_frame_label_dict
 
 log = logging.getLogger()
 
 
-class EBUSClassificationPipeline:
+# config_handler.set_global(bar='classic', spinner='classic')
 
-    def __init__(self, data_path, batch_size, image_shape, validation_split, station_names, num_stations, augment):
+
+class ClassificationPipeline:
+
+    def __init__(self, data_path, test_ds_path, batch_size, image_shape, validation_split, test_split, station_names,
+                 num_stations, augment,
+                 shuffle):
         self.data_path = data_path
+        self.test_ds_path = test_ds_path
         self.batch_size = batch_size
         self.image_shape = image_shape
         self.station_names = station_names
         self.num_stations = num_stations
         self.validation_split = validation_split
+        self.test_split = test_split
         self.augment = augment
+        self.shuffle = shuffle
         self.train_ds = None
         self.val_ds = None
+        self.test_ds = None
 
     def loader_function(self):
         print(self.station_names)
@@ -33,7 +47,7 @@ class EBUSClassificationPipeline:
             class_names=self.station_names,
             batch_size=self.batch_size,
             image_size=self.image_shape,
-            shuffle=True
+            shuffle=self.shuffle
         )
 
         val_ds = tf.keras.utils.image_dataset_from_directory(
@@ -47,11 +61,24 @@ class EBUSClassificationPipeline:
             class_names=self.station_names,
             batch_size=self.batch_size,
             image_size=self.image_shape,
-            shuffle=True
+            shuffle=self.shuffle
         )
 
-        train_ds = self.prepare(train_ds, shuffle=True, augment=self.augment)
-        val_ds = self.prepare(val_ds, shuffle=False, augment=False)
+        test_ds = tf.keras.utils.image_dataset_from_directory(
+            directory=self.test_ds_path,
+            seed=123,
+            labels='inferred',
+            label_mode=self.get_label_mode(),
+            color_mode='rgb',
+            class_names=self.station_names,
+            batch_size=self.batch_size,
+            image_size=self.image_shape,
+            shuffle=self.shuffle
+        )
+
+        self.train_ds = self.prepare(train_ds, augment=self.augment)
+        self.val_ds = self.prepare(val_ds, augment=False)  # no augmentation for validation and test data
+        self.test_ds = self.prepare(test_ds, augment=False)
 
         # Used to test operations
         '''
@@ -59,18 +86,17 @@ class EBUSClassificationPipeline:
         first_image = image_batch[0]
         print(np.min(first_image), np.max(first_image))
         plt.figure(figsize=(10, 10))
-        for images, labels in train_ds.take(1):
+        for images, labels in self.train_ds.take(1):
             for i in range(9):
-                augmented_image = data_augmentation(images[i])
                 ax = plt.subplot(3, 3, i + 1)
-                plt.imshow(augmented_image)
+                plt.imshow(images[i])
                 plt.axis("off")
             plt.show()
         '''
 
-        return train_ds, val_ds
+        return self.train_ds, self.val_ds, self.test_ds
 
-    def crop_images(self, image):
+    def crop_image(self, image):
         cropped_image = tf.image.crop_to_bounding_box(image, 24, 71, 223, 150)
         return cropped_image
 
@@ -79,10 +105,9 @@ class EBUSClassificationPipeline:
             label_mode = 'categorical'
         else:
             label_mode = 'int'
-
         return label_mode
 
-    def prepare(self, ds, shuffle=False, augment=False):
+    def prepare(self, ds, augment=False):
         AUTOTUNE = tf.data.experimental.AUTOTUNE
         # adapted from https://www.tensorflow.org/tutorials/images/transfer_learning,
         # https://www.tensorflow.org/tutorials/load_data/images

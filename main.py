@@ -11,6 +11,7 @@ def main():
     set_seed(42)
 
     trainer = train_model(data_path=data_path,
+                          test_ds_path=test_ds_path,
                           log_path=log_path,
                           image_shape=(img_size, img_size),
                           validation_split=validation_split,
