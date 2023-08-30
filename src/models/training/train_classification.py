@@ -110,7 +110,9 @@ class BaselineTrainer:
             for images, labels in self.train_ds.take(1):
                 for i in range(9):
                     ax = plt.subplot(3, 3, i + 1)
-                    plt.imshow(images[i])
+                    # normalize image from range [-1, 1] to [0, 1]
+                    image = (images[i] + 1) / 2
+                    plt.imshow(image)
                     plt.axis("off")
                     if self.num_stations > 2:
                         plt.title(self.pipeline.station_names[np.argmax(labels[i])])
@@ -242,8 +244,8 @@ class BaselineTrainer:
             self.model.fit(self.train_ds,
                            epochs=self.epochs,
                            validation_data=self.val_ds,
-                           callbacks=[save_best, early_stop, self.experiment_logger])
-            # class_weight=get_class_weight(self.train_ds, self.num_stations))
+                           callbacks=[save_best, early_stop, self.experiment_logger],
+                           class_weight=get_class_weight(self.train_ds, self.num_stations))
 
             best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
             best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
