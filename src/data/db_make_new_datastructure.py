@@ -59,8 +59,7 @@ def make_EBUS_Levanger_baseline():
                          '10L': 0,
                          '10R': 0,
                          '11L': 0,
-                         '11R': 0,
-                         '7': 0
+                         '11R': 0
                          }
     sequence_label_map = get_sequence_label_map()
 
@@ -86,7 +85,7 @@ def make_EBUS_Levanger_baseline():
             print(frame_number_dict)
 
 
-make_EBUS_Levanger_baseline()
+#make_EBUS_Levanger_baseline()
 
 
 def make_EBUS_Levanger_sequence():
@@ -95,6 +94,7 @@ def make_EBUS_Levanger_sequence():
     # add alive progress bar
     with alive_bar(len(os.listdir(data_path_standard)), title='new directory', bar='bubbles', spinner='fishes') as bar:
         for dirname in os.listdir(data_path_standard):
+            print(dirname)
             new_dir = os.path.join(data_path, dirname)
             if not os.path.exists(new_dir):
                 os.makedirs(new_dir)
@@ -109,7 +109,7 @@ def make_EBUS_Levanger_sequence():
             bar()
 
 
-# make_EBUS_Levanger_sequence()
+#make_EBUS_Levanger_sequence()
 
 
 # This function is used to balance the dataset by deleting frames from the folders with the most frames
