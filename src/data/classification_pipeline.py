@@ -169,9 +169,11 @@ class SequenceClassificationPipeline(ClassificationPipeline):
 
         else:
             # If there are less than 10 frames, repeat the last frame to make the total 10
-            last_frame = frames[-1]
+            zero_frame = np.zeros_like(frames[-1], dtype=np.float32)
             num_repeats = seq_length - num_frames
-            frames = frames + [last_frame] * num_repeats
+            print('num_repeats ', num_repeats)
+            frames = frames + [zero_frame] * num_repeats
+            print(frames)
             indices = tf.range(start=0, limit=seq_length, delta=1)
         return [frames[i] for i in indices]
 
@@ -221,11 +223,11 @@ class SequenceClassificationPipeline(ClassificationPipeline):
 
         # Split data using train_test_split
         total_samples = len(sequences)
+        print('Total samples: ', total_samples)
         validation_samples = int(self.validation_split * total_samples)
-        test_samples = int(self.test_split * total_samples)
 
         X_train, X_val, y_train, y_val = train_test_split(
-            sequences, labels, test_size=(validation_samples + test_samples), random_state=1, stratify=labels)
+            sequences, labels, test_size=validation_samples, random_state=1, stratify=labels)
 
         # TODO: import test_ds from folder
         #test_ds = None
