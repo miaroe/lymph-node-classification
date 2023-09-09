@@ -25,7 +25,7 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
 
 
     model = get_arch(train_config.get('model_arch'), train_config.get('instance_size'),
-                     train_config.get('num_stations'), train_config.get('seq_length'))
+                     train_config.get('num_stations'), train_config.get('seq_length'), stateful=False)
 
     model.compile(loss=get_loss(train_config.get('loss')), optimizer='adam',
                   metrics=['accuracy', Precision(), Recall()])
@@ -33,6 +33,7 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
 
     model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_partial()
 
+    # TODO: change back to trainer.test_ds
     score = trainer.model.evaluate(trainer.val_ds, return_dict=True)
 
     print("Model metrics using validation dataset: ")
@@ -41,7 +42,7 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
         print(f'{metric:<12}{value:<.4f}')
 
     if visualize_predictions:
-        plot_predictions(model, trainer.val_ds, trainer.pipeline.station_names, reports_path)
+        plot_predictions(model, trainer.val_ds, trainer.model_type, trainer.pipeline.station_names, reports_path)
 
     # save learning curve to src/reports/figures
     if learning_curve:
@@ -58,6 +59,7 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
                                     reports_path)
 
     if compare_metrics:
+        # only works if this was the last model trained
         current_dir = get_latest_date_time('/home/miaroe/workspace/lymph-node-classification/output/models/')
         print('current_dir', current_dir)
         model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in
