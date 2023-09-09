@@ -14,13 +14,16 @@ config = TrainConfig(batch_size=batch_size,
                      data_path=data_path,
                      image_shape=(img_size, img_size),
                      early_stop_patience=patience,
-                     log_directory=model_path,
+                     log_directory=log_path,
+                     model_directory=model_path,
                      num_epochs=epochs,
                      validation_split=validation_split,
                      test_split=test_split)
 
+
 def set_train_config():
     return config
+
 
 def get_config(config_path):
     json_config = parse_json(config_path)

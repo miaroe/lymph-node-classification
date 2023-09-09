@@ -34,18 +34,6 @@ def get_stations_config(station_config_nr):
             '11L': 6,
             '11R': 7
         }
-    elif station_config_nr == 4:  # multiclass classification with unbalanced classes, deleted 7
-        return {
-            '4L': 0,
-            '4R': 1,
-            '7L': 2,
-            '7R': 3,
-            '7' : 4,
-            '10L': 5,
-            '10R': 6,
-            '11L': 7,
-            '11R': 8
-        }
 
 
 def get_num_stations(station_config_nr):
@@ -54,18 +42,18 @@ def get_num_stations(station_config_nr):
 
 # -----------------------------  TRAINING PARAMETERS ----------------------------------
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"  # whether to use GPU for training (-1 == no GPU, else GPU)
+os.environ['CUDA_VISIBLE_DEVICES'] = "2"  # whether to use GPU for training (-1 == no GPU, else GPU)
 os.environ['CUDA_DEVICE_ORDER'] = "PCI_BUS_ID"
 
 perform_training = True
 model_type = 'sequence'  # baseline or sequence
-epochs = 1
+epochs = 100
 batch_size = 4
 patience = 20
 filter_data = False
 augment = True
-img_size = 256
-station_config_nr = 4  # class configuration (gives mapping and mapped labels)
+img_size = 299
+station_config_nr = 3  # class configuration (gives mapping and mapped labels)
 stations_config = get_stations_config(station_config_nr)
 num_stations = get_num_stations(station_config_nr)
 model_arch = "cnn-lstm"  # which architecture/CNN to use - see models.py for info about archs
@@ -74,7 +62,7 @@ mask_poor = False
 
 stratified_cv = False
 test_split = 0.1
-validation_split = 0.1
+validation_split = 0.2
 instance_size = (img_size, img_size, 3)  # Default: (299, 299, 1). Set this to (299, 299, 1) to not downsample further.
 learning_rate = 0.0001  # relevant for the optimizer, Adam used by default (with default lr=1e-3), I normally use 1e-4 when finetuning
 seq_length = 30  # number of frames in each sequence
