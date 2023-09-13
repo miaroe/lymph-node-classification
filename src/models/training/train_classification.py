@@ -26,11 +26,10 @@ def train_model(data_path, test_ds_path, log_path, image_shape, validation_split
                 batch_size, stations_config, num_stations, loss, model_type, model_arch,
                 instance_size, learning_rate, model_path, patience,
                 epochs, augment, stratified_cv, seq_length):
-
     if model_type == "baseline":
         trainer = BaselineTrainer(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
-                                 batch_size, stations_config, num_stations, loss, model_type, model_arch,
-                                 instance_size, learning_rate, model_path, patience, epochs, augment, stratified_cv)
+                                  batch_size, stations_config, num_stations, loss, model_type, model_arch,
+                                  instance_size, learning_rate, model_path, patience, epochs, augment, stratified_cv)
     elif model_type == "sequence":
         trainer = SequenceTrainer(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
                                   batch_size, stations_config, num_stations, loss, model_type, model_arch,
@@ -124,7 +123,8 @@ class BaselineTrainer:
                     plt.title(self.pipeline.station_names[np.argmax(labels[i])])
                 else:
                     plt.title(
-                        self.pipeline.station_names[labels.numpy()[i]])  # to get class label from tf.Tensor(0, shape=(), dtype=int32)
+                        self.pipeline.station_names[
+                            labels.numpy()[i]])  # to get class label from tf.Tensor(0, shape=(), dtype=int32)
         plt.show()
 
     # -----------------------------  BUILDING AND SAVING MODEL ----------------------------------
@@ -221,6 +221,7 @@ class BaselineTrainer:
             best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
             best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
 
+
 class SequenceTrainer:
 
     def __init__(self,
@@ -297,15 +298,15 @@ class SequenceTrainer:
         # plotting the 6 first frames of the first sequence in the first batch
         batch = self.train_ds.take(1)
         for i, (images, labels) in enumerate(batch):
-            print('images shape: ', images.shape) # (4, 30, 256, 256, 3)
-            print('labels shape: ', labels.shape) # (4, 8)
+            print('images shape: ', images.shape)  # (4, 30, 256, 256, 3)
+            print('labels shape: ', labels.shape)  # (4, 8)
 
             plt.figure(figsize=(10, 10))
             for j in range(6):
                 ax = plt.subplot(2, 3, j + 1)
                 # normalize image from range [-1, 1] to [0, 1]
-                #image = (images[0][j] + 1) / 2
-                plt.imshow(images[0][j])
+                # image = (images[0][j] + 1) / 2
+                plt.imshow(np.array(images[0][j]).astype("uint8"))
                 plt.title(f"Frame {j}, Label: {self.pipeline.station_names[np.argmax(labels[0][j])]}")
                 plt.axis("off")
             plt.tight_layout()
@@ -322,7 +323,8 @@ class SequenceTrainer:
         self.model.compile(
             optimizer=Adam(self.learning_rate),
             loss=get_loss(self.loss),
-            metrics=['accuracy', Precision(), Recall(), F1Score(self.num_stations, average='macro')] # macro treats all classes equally
+            metrics=['accuracy', Precision(), Recall(), F1Score(self.num_stations, average='macro')]
+            # macro treats all classes equally
         )
 
     def save_model(self):
@@ -332,7 +334,8 @@ class SequenceTrainer:
         train_config = set_train_config()
 
         # make callbacks
-        tb_logger = TensorBoard(log_dir=os.path.join('logs/fit/', train_config.log_directory), histogram_freq=1, update_freq="batch")
+        tb_logger = TensorBoard(log_dir=os.path.join('logs/fit/', train_config.log_directory), histogram_freq=1,
+                                update_freq="batch")
 
         self.experiment_logger = ExperimentLogger(logdir=train_config.model_directory,
                                                   train_config=train_config.get_config())
@@ -363,8 +366,10 @@ class SequenceTrainer:
         self.model.fit(self.train_ds,
                        epochs=self.epochs,
                        validation_data=self.val_ds,
-                       callbacks=[save_best, early_stop, self.experiment_logger, tb_logger, time],
-                       class_weight=get_class_weight(self.train_ds, self.num_stations))
+                       steps_per_epoch=200,
+                       validation_steps=50,
+                       callbacks=[save_best, early_stop, self.experiment_logger, tb_logger, time])
+        # class_weight=get_class_weight(self.train_ds, self.num_stations))
 
         best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
         best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))

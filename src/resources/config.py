@@ -42,7 +42,7 @@ def get_num_stations(station_config_nr):
 
 # -----------------------------  TRAINING PARAMETERS ----------------------------------
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "2"  # whether to use GPU for training (-1 == no GPU, else GPU)
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"  # whether to use GPU for training (-1 == no GPU, else GPU)
 os.environ['CUDA_DEVICE_ORDER'] = "PCI_BUS_ID"
 
 perform_training = True

@@ -7,7 +7,9 @@ import fast
 import os
 import numpy as np
 from time import sleep
-from src.resources.config import *
+# from src.resources.config import *
+
+full_video_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Levanger_full_videos/Patient_008/Sequence_001'
 
 class MyRandomAccessStreamer(fast.PythonRandomAccessStreamer):
     """
@@ -40,7 +42,7 @@ class MyRandomAccessStreamer(fast.PythonRandomAccessStreamer):
         If these calls return and exception, it means the streaming should stop, thus you need to exit
         your streaming loop.
         """
-        path = os.path.join(local_data_path, 'frame_#.png')
+        path = os.path.join(full_video_path, 'frame_#.png')
         while not self.isStopped():
             # First, we need to check if this streaming is paused
             if self.getPause():

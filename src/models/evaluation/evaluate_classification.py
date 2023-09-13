@@ -34,7 +34,9 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
     model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_partial()
 
     # TODO: change back to trainer.test_ds
-    score = trainer.model.evaluate(trainer.val_ds, return_dict=True)
+    finite_train_ds = trainer.train_ds.take(50)
+    finite_val_ds = trainer.val_ds.take(50)
+    score = trainer.model.evaluate(finite_val_ds, return_dict=True, steps=50)
 
     print("Model metrics using validation dataset: ")
     print(f'{"Metric":<12}{"Value"}')
@@ -42,19 +44,19 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
         print(f'{metric:<12}{value:<.4f}')
 
     if visualize_predictions:
-        plot_predictions(model, trainer.val_ds, trainer.model_type, trainer.pipeline.station_names, reports_path)
+        plot_predictions(model, finite_val_ds, trainer.model_type, trainer.pipeline.station_names, reports_path)
 
     # save learning curve to src/reports/figures
     if learning_curve:
         plot_learning_curve(model_path, reports_path)
 
     if station_distribution:
-        station_distribution_figure_and_report(trainer.train_ds, trainer.val_ds, train_config.get('num_stations'),
+        station_distribution_figure_and_report(finite_train_ds, finite_val_ds, train_config.get('num_stations'),
                                                train_config.get('stations_config'), reports_path)
 
     # save confusion matrix to src/reports/figures and save classification report to src/reports
     if conf_matrix:
-        confusion_matrix_and_report(model, trainer.val_ds, train_config.get('num_stations'), #TODO: chnage back to val_ds
+        confusion_matrix_and_report(model, finite_val_ds, train_config.get('num_stations'),
                                     train_config.get('stations_config'),
                                     reports_path)
 

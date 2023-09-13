@@ -177,11 +177,11 @@ def get_arch(model_arch, instance_size, num_stations, seq_length=None, stateful=
             layer.trainable = False
 
         # Make sure the correct layers are frozen
-        for i, layer in enumerate(base_model.layers):
-            print(i, layer.name, layer.trainable)
+        #for i, layer in enumerate(base_model.layers):
+            #print(i, layer.name, layer.trainable)
 
         # Create the input layer for the sequence of images
-        sequence_input = Input(shape=(seq_length, *instance_size))  # (B, T, H, W, C)
+        sequence_input = Input(shape=(None, *instance_size))  # (B, T, H, W, C)
 
         # Create a Lambda layer to apply preprocessing to each image in the sequence
         preprocess = Lambda(lambda z: tf.keras.applications.inception_v3.preprocess_input(z))(sequence_input)
