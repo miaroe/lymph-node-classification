@@ -16,6 +16,7 @@ from src.resources.train_config import set_train_config
 from src.data.classification_pipeline import BaselineClassificationPipeline, SequenceClassificationPipeline
 from src.resources.ml_models import get_arch
 from src.utils.get_class_weight import get_class_weight
+from src.utils.metric_callback import ClassMetricsCallback
 from src.utils.timing_callback import TimingCallback
 
 enable_gpu_growth()
@@ -25,7 +26,7 @@ logger = logging.getLogger()
 def train_model(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
                 batch_size, stations_config, num_stations, loss, model_type, model_arch,
                 instance_size, learning_rate, model_path, patience,
-                epochs, augment, stratified_cv, seq_length):
+                epochs, steps_per_epoch, validation_steps, stride, augment, stratified_cv, seq_length):
     if model_type == "baseline":
         trainer = BaselineTrainer(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
                                   batch_size, stations_config, num_stations, loss, model_type, model_arch,
@@ -33,7 +34,8 @@ def train_model(data_path, test_ds_path, log_path, image_shape, validation_split
     elif model_type == "sequence":
         trainer = SequenceTrainer(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
                                   batch_size, stations_config, num_stations, loss, model_type, model_arch,
-                                  instance_size, learning_rate, model_path, patience, epochs, augment, seq_length)
+                                  instance_size, learning_rate, model_path, patience, epochs, steps_per_epoch,
+                                  validation_steps, stride, augment, seq_length)
     else:
         raise ValueError("Model type not supported")
     # Perform training
@@ -242,6 +244,9 @@ class SequenceTrainer:
                  model_path: str,
                  patience: int,
                  epochs: int,
+                 steps_per_epoch: int,
+                 validation_steps: int,
+                 stride: int,
                  augment: bool,
                  seq_length: int
                  ):
@@ -262,6 +267,9 @@ class SequenceTrainer:
         self.model_path = model_path
         self.patience = patience
         self.epochs = epochs
+        self.steps_per_epoch = steps_per_epoch
+        self.validation_steps = validation_steps
+        self.stride = stride
         self.augment = augment
         self.seq_length = seq_length
 
@@ -270,7 +278,6 @@ class SequenceTrainer:
         self.callbacks = None
         self.train_ds = None
         self.val_ds = None
-        self.test_ds = None
 
     # -----------------------------  PREPROCESSING ----------------------------------
 
@@ -288,28 +295,32 @@ class SequenceTrainer:
                                                        augment=self.augment,
                                                        shuffle=False,
                                                        stations_config=self.stations_config,
-                                                       seq_length=self.seq_length
+                                                       seq_length=self.seq_length,
+                                                       stride=self.stride
                                                        )
 
         self.train_ds, self.val_ds = self.pipeline.loader_function()
 
         # MULTICLASS : images: shape=(32, 10, 256, 256, 3), labels: shape=(32, 9) for batch_size=32
 
-        # plotting the 6 first frames of the first sequence in the first batch
-        batch = self.train_ds.take(1)
-        for i, (images, labels) in enumerate(batch):
-            print('images shape: ', images.shape)  # (4, 30, 256, 256, 3)
-            print('labels shape: ', labels.shape)  # (4, 8)
+        # plotting the seq_length first frames of the first sequence in the first four batches
+        for i, (images, labels) in enumerate(self.train_ds.take(4)):
+            # print('images shape: ', images.shape)  # (4, seq_length, 256, 256, 3)
+            # print('labels shape: ', labels.shape)  # (4, 8)
+            rows = self.seq_length // 2 if self.seq_length % 2 == 0 else self.seq_length // 2 + 1
 
             plt.figure(figsize=(10, 10))
-            for j in range(6):
-                ax = plt.subplot(2, 3, j + 1)
-                # normalize image from range [-1, 1] to [0, 1]
-                # image = (images[0][j] + 1) / 2
-                plt.imshow(np.array(images[0][j]).astype("uint8"))
-                plt.title(f"Frame {j}, Label: {self.pipeline.station_names[np.argmax(labels[0][j])]}")
+            for j in range(self.seq_length):
+                plt.subplot(rows, 3, j + 1)
+                # normalize image from range [-1, 1] to [0, 255]
+                # image = (images[0][j] + 1) * 127.5
+                # image = images[i][j] * 255  # for range [0, 1]
+                plt.imshow(np.array(images[i][j]).astype("uint8"))
+                plt.title(f"Frame {j}, Label: {self.pipeline.station_names[np.argmax(labels.numpy()[0])]}", fontsize=10)
                 plt.axis("off")
             plt.tight_layout()
+            plt.subplots_adjust(top=0.85)  # Adjust top spacing for suptitle
+            plt.suptitle(f"Batch {i}")
             plt.show()
 
     # -----------------------------  BUILDING AND SAVING MODEL ----------------------------------
@@ -349,9 +360,14 @@ class SequenceTrainer:
         early_stop = EarlyStopping(monitor='val_loss', min_delta=0.0001,
                                    patience=train_config.early_stop_patience, verbose=1)
 
-        time = TimingCallback()
+        # time = TimingCallback()
 
-        return save_best, early_stop, tb_logger, time
+        class_metrics = ClassMetricsCallback(station_names=self.pipeline.station_names,
+                                             train_ds=self.train_ds.take(self.steps_per_epoch),
+                                             val_ds=self.val_ds.take(self.validation_steps),
+                                             save_path=os.path.join(self.model_path, 'metrics.csv'))
+
+        return save_best, early_stop, tb_logger, class_metrics
 
     # -----------------------------  TRAINING ----------------------------------
 
@@ -361,15 +377,15 @@ class SequenceTrainer:
 
         print("-- TRAINING --")
 
-        save_best, early_stop, tb_logger, time = self.save_model()
+        save_best, early_stop, tb_logger, class_metrics = self.save_model()
 
         self.model.fit(self.train_ds,
                        epochs=self.epochs,
                        validation_data=self.val_ds,
-                       steps_per_epoch=200,
-                       validation_steps=50,
-                       callbacks=[save_best, early_stop, self.experiment_logger, tb_logger, time])
-        # class_weight=get_class_weight(self.train_ds, self.num_stations))
+                       steps_per_epoch=self.steps_per_epoch,
+                       validation_steps=self.validation_steps,
+                       callbacks=[save_best, early_stop, self.experiment_logger, tb_logger, class_metrics],
+                       class_weight=get_class_weight(self.train_ds.take(self.steps_per_epoch), self.num_stations))
 
         best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
         best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
