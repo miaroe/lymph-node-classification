@@ -8,7 +8,7 @@ from src.models.evaluation.evaluate_classification import evaluate_model
 def main():
     """ The function running the entire pipeline of the project """
     # To enable determinism between experiments
-    set_seed(42)
+    #set_seed(42)
 
     trainer = train_model(data_path=data_path,
                           test_ds_path=test_ds_path,
@@ -27,6 +27,9 @@ def main():
                           model_path=model_path,
                           patience=patience,
                           epochs=epochs,
+                          steps_per_epoch=steps_per_epoch,
+                          validation_steps=validation_steps,
+                          stride=stride,
                           augment=augment,
                           stratified_cv=stratified_cv,
                           seq_length=seq_length)

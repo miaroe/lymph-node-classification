@@ -7,7 +7,9 @@ from alive_progress import alive_bar, config_handler
 from sklearn.model_selection import train_test_split
 import random
 
+from src.resources.augmentation import GammaTransform, ContrastScale, Blur, BrightnessTransform, GaussianShadow, RandomAugmentation
 from src.data.full_video_label_dict import get_frame_label_dict
+from src.utils.get_paths import get_station_paths, get_frame_paths
 
 log = logging.getLogger()
 
@@ -152,42 +154,18 @@ class BaselineClassificationPipeline(ClassificationPipeline):
 
 class SequenceClassificationPipeline(ClassificationPipeline):
     def __init__(self, data_path, test_ds_path, batch_size, image_shape, validation_split, test_split, station_names,
-                 num_stations, augment, shuffle, stations_config, seq_length):
+                 num_stations, augment, shuffle, stations_config, seq_length, stride):
         super().__init__(data_path, test_ds_path, batch_size, image_shape, validation_split, test_split, station_names,
                          num_stations, augment, shuffle)
         self.seq_length = seq_length
-        self.shift = 20
-        self.stride = 1
+        self.stride = stride
         self.stations_config = stations_config
-        self.train_paths, self.val_paths = self.get_paths()
+        self.train_paths, self.val_paths = self.get_training_paths()
 
-    def get_paths(self):
-        station_paths_list = self.get_station_paths()
+    def get_training_paths(self):
+        station_paths_list = get_station_paths(self.data_path)
         train_paths, val_paths = self.split_data(station_paths_list)
         return train_paths, val_paths
-
-    def get_station_paths(self):
-        station_paths_list = []
-        for patient_folder in sorted(os.listdir(self.data_path)):
-            patient_path = os.path.join(self.data_path, patient_folder)
-            if os.path.isdir(patient_path):
-                station_paths_list.append([])
-                for station_folder in os.listdir(patient_path):
-                    station_path = os.path.join(patient_path, station_folder)
-                    if os.path.isdir(station_path):
-                        station_paths_list[-1].append(station_path)
-
-        return station_paths_list
-
-    def get_frame_paths(self, station_path):
-        frame_paths_list = []
-        frame_names = os.listdir(station_path)
-        sorted_frame_names = sorted(frame_names, key=lambda x: int(x.split('_')[1].replace('.png', '')))
-        for frame in sorted_frame_names:
-            frame_path = os.path.join(station_path, frame)
-            if os.path.isfile(frame_path):
-                frame_paths_list.append(frame_path)
-        return frame_paths_list
 
     def split_data(self, frames):
 
@@ -197,7 +175,7 @@ class SequenceClassificationPipeline(ClassificationPipeline):
 
         indices = np.arange(total_samples)
 
-        train_ind, val_ind = train_test_split(indices, test_size=validation_samples, random_state=42)
+        train_ind, val_ind = train_test_split(indices, test_size=validation_samples, random_state=123)
 
         # Index sequences and labels using the indices
         train_frames = [frames[i] for i in train_ind]
@@ -210,8 +188,8 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         img = tf.io.read_file(image_path)
         img = tf.image.decode_image(img, channels=3)  # Assuming RGB images
         img = img[100:1035, 530:1658]  # Cropping the image to the region of interest
-        img = tf.cast(img, tf.float32)
-        # img = (tf.cast(img, tf.float32) / 127.5) - 1  # specific for mobilenet, inception TODO: change for other models
+        img = tf.cast(img, tf.float32) # pixel values are in range [0, 255] to apply preprocessing layer in ml_models
+        #img = (tf.cast(img, tf.float32) / 127.5) - 1  # specific for mobilenet, inception TODO: change for other models
         img = tf.image.resize(img, self.image_shape)  # resizing the image to the desired shape
         return img
 
@@ -227,20 +205,19 @@ class SequenceClassificationPipeline(ClassificationPipeline):
 
     # Function to create image sequences of seq_length for one station for one patient
     def create_sequence(self, station_path):
-        station_path = station_path.numpy().decode('utf-8')  # convert station path from tf tensor to string
-        frame_paths = self.get_frame_paths(station_path)  # get frame paths for one station
+        station_path = station_path.numpy().decode('utf-8')  # converts station path from tf tensor to string
+        frame_paths = get_frame_paths(station_path)  # gets frame paths for one station
 
         num_frames = len(frame_paths)
-        if num_frames < self.seq_length:
+        if num_frames < (self.seq_length * self.stride):
             start_index = 0
         else:
             start_index = random.randint(0, num_frames - (self.seq_length * self.stride))
-        # frame_paths_ds = tf.data.Dataset.from_tensor_slices(frame_paths[start_index:])
-        # frame_paths_sequence_ds = self.make_window_dataset(frame_paths_ds)
         end_index = start_index + (self.seq_length * self.stride)
-        sequence_paths = frame_paths[start_index:end_index:self.stride]
+        sequence_paths = frame_paths[start_index:end_index:self.stride]  # len(sequence_paths) = seq_length (or less)
         sequence = self.load_image_sequence(sequence_paths)
-        sequence = tf.convert_to_tensor(sequence)  # convert sequence to tf tensor
+        #sequence = tf.convert_to_tensor(sequence)  # convert sequence to tf tensor
+        #print('sequence_tensor: ', sequence)
         return sequence
 
     def get_label_from_path(self, path):
@@ -251,23 +228,23 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         return label_one_hot
 
     # https://www.tensorflow.org/api_docs/python/tf/data/Dataset#from_generator
-    def gen(self):
+    def gen(self, paths):
         while True:  # infinite generator
-            patient = random.choice(self.train_paths)  # choose a random patient
+            patient = random.choice(paths)  # choose a random patient
             station = random.choice(patient)  # choose a random station
             yield station, self.get_label_from_path(station)
 
     def loader_function(self):
-        # create dataset from generator
-        gen_train_ds = tf.data.Dataset.from_generator(self.gen, output_shapes=(tf.TensorShape([]),
-                                                                               tf.TensorShape([self.num_stations])),
+        # create dataset from generator (added lambda to provide a callable function to .from_generator)
+        gen_train_ds = tf.data.Dataset.from_generator(lambda: self.gen(self.train_paths), output_shapes=(tf.TensorShape([]),
+                                                                                                 tf.TensorShape([self.num_stations])),
                                                       output_types=(tf.string, tf.float32))
 
-        gen_val_ds = tf.data.Dataset.from_generator(self.gen, output_shapes=(tf.TensorShape([]),
-                                                                             tf.TensorShape([self.num_stations])),
+        gen_val_ds = tf.data.Dataset.from_generator(lambda: self.gen(self.val_paths), output_shapes=(tf.TensorShape([]),
+                                                                                             tf.TensorShape([self.num_stations])),
                                                     output_types=(tf.string, tf.float32))
 
-        # create sequence of image paths for each station using tf.py_function
+        # creates sequence of image paths for each station using tf.py_function
         train_ds = gen_train_ds.map(lambda x, y: (tf.py_function(func=self.create_sequence,
                                                                  inp=[x], Tout=tf.float32), y),
                                     num_parallel_calls=tf.data.AUTOTUNE)
@@ -279,19 +256,26 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         '''
         # https://www.tensorflow.org/tutorials/images/data_augmentation
         data_augmentation = tf.keras.Sequential([
-            tf.keras.layers.RandomRotation(0.1),  # rotating by a random amount in the range [-10% * 2pi, 10% * 2pi]
-            tf.keras.layers.RandomContrast(0.1)  # (x - mean) * contrast_factor + mean
+            #tf.keras.layers.RandomRotation(0.1),  # rotating by a random amount in the range [-10% * 2pi, 10% * 2pi]
+            #tf.keras.layers.RandomContrast(0.1)  # (x - mean) * contrast_factor + mean
+            # add custom data augmentation here using GammaTransform class
+            GammaTransform()
         ])
-
-        # apply data augmentation to training data
-        train_ds = train_ds.map(lambda x, y: (data_augmentation(x, training=True), y),
-                                num_parallel_calls=tf.data.AUTOTUNE)
         
         '''
+
+        if self.augment:
+            augmentation_layers = [GammaTransform(), ContrastScale(), Blur(), BrightnessTransform(),
+                                   GaussianShadow(sigma_x=(0.1, 0.5), sigma_y=(0.1, 0.9), strength=(0.5, 0.8))]
+            data_augmentation = RandomAugmentation(augmentation_layers)
+
+            # apply data augmentation to training data
+            train_ds = train_ds.map(lambda x, y: (tf.py_function(func=data_augmentation,
+                                                                 inp=[x], Tout=tf.float32), y),
+                                    num_parallel_calls=tf.data.AUTOTUNE)
 
         # shuffle and batch the datasets
         self.train_ds = train_ds.batch(self.batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
         self.val_ds = val_ds.batch(self.batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
 
         return self.train_ds, self.val_ds
-
