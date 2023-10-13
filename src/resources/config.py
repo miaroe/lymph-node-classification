@@ -48,11 +48,14 @@ os.environ['CUDA_DEVICE_ORDER'] = "PCI_BUS_ID"
 perform_training = True
 model_type = 'sequence'  # baseline or sequence
 epochs = 100
-batch_size = 4
+steps_per_epoch = 200
+validation_steps = 50
+stride = 4
+batch_size = 8
 patience = 20
-filter_data = False
+filter_data = False # not used atm
 augment = True
-img_size = 299
+img_size = 224
 station_config_nr = 3  # class configuration (gives mapping and mapped labels)
 stations_config = get_stations_config(station_config_nr)
 num_stations = get_num_stations(station_config_nr)
@@ -65,16 +68,16 @@ test_split = 0.1
 validation_split = 0.2
 instance_size = (img_size, img_size, 3)  # Default: (299, 299, 1). Set this to (299, 299, 1) to not downsample further.
 learning_rate = 0.0001  # relevant for the optimizer, Adam used by default (with default lr=1e-3), I normally use 1e-4 when finetuning
-seq_length = 30  # number of frames in each sequence
+seq_length = 5  # number of frames in each sequence
 
 date = datetime.today().strftime('%Y-%m-%d')
 time = datetime.today().strftime('%H:%M:%S')
 
 # -----------------------------  EVALUATION PARAMETERS ----------------------------------
-visualize_predictions = True
+visualize_predictions = False
 learning_curve = True
 conf_matrix = True
-model_layout = True
+model_layout = False
 station_distribution = True
 compare_metrics = True
 
