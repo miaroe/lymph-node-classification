@@ -168,23 +168,30 @@ def get_arch(model_arch, instance_size, num_stations, seq_length=None, stateful=
         model = Model(inputs=base_model.input,
                       outputs=x)
 
+
     elif model_arch == 'cnn-lstm':
         # Create the base model from the pre-trained model VGG16
-        base_model = InceptionV3(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
+        #base_model = VGG16(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
+        #base_model = InceptionV3(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
+        # Create the base model from the pre-trained model MobileNet V2
+        base_model = tf.keras.applications.MobileNetV2(input_shape=instance_size, include_top=False, weights='imagenet')
+        #base_model.trainable = False
 
-        # Freeze two convolution blocks
-        for layer in base_model.layers[:-2]:
+
+        # Freeze all layers except the last 4
+        for layer in base_model.layers[:-20]:
             layer.trainable = False
 
         # Make sure the correct layers are frozen
-        #for i, layer in enumerate(base_model.layers):
-            #print(i, layer.name, layer.trainable)
+        for i, layer in enumerate(base_model.layers):
+            print(i, layer.name, layer.trainable)
 
         # Create the input layer for the sequence of images
         sequence_input = Input(shape=(None, *instance_size))  # (B, T, H, W, C)
 
         # Create a Lambda layer to apply preprocessing to each image in the sequence
-        preprocess = Lambda(lambda z: tf.keras.applications.inception_v3.preprocess_input(z))(sequence_input)
+        # remember pixel values need to be in range [0, 255] here
+        preprocess = Lambda(lambda z: tf.keras.applications.mobilenet_v2.preprocess_input(z))(sequence_input)
 
         # Apply the CNN base model to each image in the sequence
         x = TimeDistributed(base_model)(preprocess)  # (B, T, H', W', C')
@@ -193,13 +200,15 @@ def get_arch(model_arch, instance_size, num_stations, seq_length=None, stateful=
         x = TimeDistributed(tf.keras.layers.GlobalAveragePooling2D())(x)  # (B, T, C')
 
         # Create an LSTM layer
+        x = LSTM(32, return_sequences=True, stateful=stateful)(x)  # (B, T, lstm_output_dim)
+
         x = LSTM(32, return_sequences=False, stateful=stateful)(x)  # (B, lstm_output_dim)
 
         # Create a dense layer
-        x = Dense(128, activation='relu')(x)  # (B, dense_output_dim)
+        x = Dense(64, activation='relu')(x)  # (B, dense_output_dim)
 
         # Create a dropout layer
-        x = Dropout(0.5)(x)  # (B, dense_output_dim)
+        x = Dropout(0.2)(x)  # (B, dense_output_dim)
 
         # Create the output layer for classification
         output = Dense(num_stations, activation='softmax')(x)  # (B, num_classes)
