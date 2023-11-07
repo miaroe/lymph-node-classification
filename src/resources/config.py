@@ -34,6 +34,35 @@ def get_stations_config(station_config_nr):
             '11L': 6,
             '11R': 7
         }
+    elif station_config_nr == 4:  # multiclass classification with unbalanced classes, deleted 7 and 10L
+        return {
+            '4L': 0,
+            '4R': 1,
+            '7L': 2,
+            '7R': 3,
+            '10R': 4,
+            '11L': 5,
+            '11R': 6
+        }
+    elif station_config_nr == 5:  # multiclass classification with unbalanced classes, combined 7, 7R and 7L
+        return {
+            '4L': 0,
+            '4R': 1,
+            '7': 2,
+            '10L': 3,
+            '10R': 4,
+            '11L': 5,
+            '11R': 6
+        }
+    elif station_config_nr == 6:  # multiclass classification with unbalanced classes, combined 7, 7R and 7L, removed 10L
+        return {
+            '4L': 0,
+            '4R': 1,
+            '7': 2,
+            '10R': 3,
+            '11L': 4,
+            '11R': 5
+        }
 
 
 def get_num_stations(station_config_nr):
@@ -46,48 +75,50 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"  # whether to use GPU for training (-1 
 os.environ['CUDA_DEVICE_ORDER'] = "PCI_BUS_ID"
 
 perform_training = True
-model_type = 'sequence'  # baseline or sequence
-epochs = 100
+model_type = 'combined_baseline'  # baseline, combined_baseline or sequence
+epochs = 200
 steps_per_epoch = 200
 validation_steps = 50
 stride = 4
-batch_size = 8
+batch_size = 32
 patience = 20
-filter_data = False # not used atm
+filter_data = False # only includes sequences labeled as 'good' and 'ok'
 augment = True
-img_size = 224
-station_config_nr = 3  # class configuration (gives mapping and mapped labels)
+img_size = 256
+station_config_nr = 6  # class configuration (gives mapping and mapped labels)
 stations_config = get_stations_config(station_config_nr)
 num_stations = get_num_stations(station_config_nr)
-model_arch = "cnn-lstm"  # which architecture/CNN to use - see models.py for info about archs
+model_arch = "cvc_net"  # which architecture/CNN to use - see models.py for info about archs
 loss = 'categoricalCrossEntropy' # binaryCrossEntropy for binary, categoricalCrossEntropy / focalCrossEntropy for multiclass
-mask_poor = False
 
 stratified_cv = False
 test_split = 0.1
 validation_split = 0.2
 instance_size = (img_size, img_size, 3)  # Default: (299, 299, 1). Set this to (299, 299, 1) to not downsample further.
 learning_rate = 0.0001  # relevant for the optimizer, Adam used by default (with default lr=1e-3), I normally use 1e-4 when finetuning
-seq_length = 5  # number of frames in each sequence
+seq_length = 10  # number of frames in each sequence
 
 date = datetime.today().strftime('%Y-%m-%d')
 time = datetime.today().strftime('%H:%M:%S')
 
 # -----------------------------  EVALUATION PARAMETERS ----------------------------------
-visualize_predictions = False
+visualize_predictions = True
 learning_curve = True
 conf_matrix = True
-model_layout = False
+model_layout = True
 station_distribution = True
 compare_metrics = True
 
 # -----------------------------  PATHS ----------------------------------
 if model_type == 'baseline':
-    data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Levanger_baseline'
-    test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Levanger_test/baseline'
+    data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger'
+    test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger/test'
+elif model_type == 'combined_baseline':
+    data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs'
+    test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs/test' #the same data as for baseline as test_patients are chosen manually for now
 elif model_type == 'sequence':
     data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Levanger_sequence'
-    test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Levanger_test/sequence'
+    test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_test/sequence'
 
 db_path = '/mnt/EncryptedData1/LungNavigation/EBUS/'
 model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/' + date + '/' + time + '/'
@@ -95,7 +126,7 @@ log_path = '/home/miaroe/workspace/lymph-node-classification/output/logs/' + dat
 reports_path = '/home/miaroe/workspace/lymph-node-classification/reports/' + date + '/' + time + '/'
 
 local_data_path = '/Users/miarodde/Documents/sintef/ebus-ai/lymph-node-classification/data/Station_7R_001'
-local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/lymph-node-classification/data/Patient_037/Sequence_001'
+local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/EBUS_Levanger_full_videos/Patient_036/Sequence_001'
 local_model_path = '/Users/miarodde/Documents/sintef/ebus-ai/lymph-node-classification/output/models/'
 local_model_name = 'best_model'
 local_logfile_path = '/Users/miarodde/Documents/sintef/ebus-ai/lymph-node-classification/output/logs'

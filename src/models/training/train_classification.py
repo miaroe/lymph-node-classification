@@ -11,6 +11,7 @@ from sklearn.model_selection import StratifiedKFold
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import Precision, Recall
+from contextlib import redirect_stdout
 from src.resources.loss import get_loss
 from src.resources.train_config import set_train_config
 from src.data.classification_pipeline import BaselineClassificationPipeline, SequenceClassificationPipeline
@@ -22,12 +23,11 @@ from src.utils.timing_callback import TimingCallback
 enable_gpu_growth()
 logger = logging.getLogger()
 
-
 def train_model(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
                 batch_size, stations_config, num_stations, loss, model_type, model_arch,
                 instance_size, learning_rate, model_path, patience,
                 epochs, steps_per_epoch, validation_steps, stride, augment, stratified_cv, seq_length):
-    if model_type == "baseline":
+    if model_type == "baseline" or model_type == "combined_baseline":
         trainer = BaselineTrainer(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
                                   batch_size, stations_config, num_stations, loss, model_type, model_arch,
                                   instance_size, learning_rate, model_path, patience, epochs, augment, stratified_cv)
@@ -106,29 +106,28 @@ class BaselineTrainer:
                                                        test_split=self.test_split,
                                                        station_names=list(self.stations_config.keys()),
                                                        num_stations=self.num_stations,
-                                                       augment=self.augment,
-                                                       shuffle=True
+                                                       augment=self.augment
                                                        )
         self.train_ds, self.val_ds, self.test_ds = self.pipeline.loader_function()
 
         # MULTICLASS : images: shape=(32, 256, 256, 3), labels: shape=(32, 9) for batch_size=32
         # BINARY : labels: tf.Tensor([0 1 0 1 1 0 1 1 0 0 0 0 0 0 1 0 0 1 0 1 1 0 0 0 0 0 0 0 1 0 1 0], shape=(32,), dtype=int32)
+        plt.style.use('ggplot')
         plt.figure(figsize=(10, 10))
         for images, labels in self.train_ds.take(1):
             for i in range(9):
                 ax = plt.subplot(3, 3, i + 1)
                 # normalize image from range [-1, 1] to [0, 1]
-                image = (images[i] + 1) / 2
-                plt.imshow(image)
+                #image = (images[i] + 1) / 2
+                plt.imshow(images[i])
                 plt.axis("off")
                 if self.num_stations > 2:
-                    plt.title(self.pipeline.station_names[np.argmax(labels[i])])
+                    plt.title(self.pipeline.station_names[np.argmax(labels[i])] + ' train')
                 else:
                     plt.title(
                         self.pipeline.station_names[
                             labels.numpy()[i]])  # to get class label from tf.Tensor(0, shape=(), dtype=int32)
         plt.show()
-
     # -----------------------------  BUILDING AND SAVING MODEL ----------------------------------
 
     def build_model(self):
@@ -139,11 +138,16 @@ class BaselineTrainer:
         self.model.compile(
             optimizer=Adam(self.learning_rate),
             loss=get_loss(self.loss),
-            metrics=['accuracy', Precision(), Recall(), F1Score(self.num_stations)]
+            metrics=['accuracy', Precision(), Recall(), F1Score(self.num_stations, average='macro')]
         )
 
     def save_model(self):
         os.makedirs(self.model_path, exist_ok=True)
+
+        # save self.model.summary()
+        with open(os.path.join(self.model_path, 'model_summary.txt'), 'w') as f:
+            with redirect_stdout(f):
+                self.model.summary()
 
         # make experiment logger
         train_config = set_train_config()
@@ -293,7 +297,6 @@ class SequenceTrainer:
                                                        station_names=list(self.stations_config.keys()),
                                                        num_stations=self.num_stations,
                                                        augment=self.augment,
-                                                       shuffle=False,
                                                        stations_config=self.stations_config,
                                                        seq_length=self.seq_length,
                                                        stride=self.stride
@@ -309,6 +312,7 @@ class SequenceTrainer:
             # print('labels shape: ', labels.shape)  # (4, 8)
             rows = self.seq_length // 2 if self.seq_length % 2 == 0 else self.seq_length // 2 + 1
 
+            plt.style.use('ggplot')
             plt.figure(figsize=(10, 10))
             for j in range(self.seq_length):
                 plt.subplot(rows, 3, j + 1)
@@ -328,7 +332,7 @@ class SequenceTrainer:
     def build_model(self):
         print('num_stations: ', self.num_stations)
 
-        self.model = get_arch(self.model_arch, self.instance_size, self.num_stations, self.seq_length, stateful=False)
+        self.model = get_arch(self.model_arch, self.instance_size, self.num_stations, stateful=False)
         print(self.model.summary())
 
         self.model.compile(
@@ -340,6 +344,11 @@ class SequenceTrainer:
 
     def save_model(self):
         os.makedirs(self.model_path, exist_ok=True)
+
+        # save self.model.summary()
+        with open(os.path.join(self.model_path, 'model_summary.txt'), 'w') as f:
+            with redirect_stdout(f):
+                self.model.summary()
 
         # make experiment logger
         train_config = set_train_config()

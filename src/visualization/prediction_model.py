@@ -1,25 +1,21 @@
-import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 import numpy as np
 
-
 def plot_predictions(model, test_ds, model_type, station_names, reports_path):
 
     # plot the first 9 images in the test set, and their predicted labels and true labels
-    fig = plt.figure(figsize=(10, 10))
+    plt.style.use('ggplot')
+    fig = plt.figure(figsize=(20, 10))
     for images, labels in test_ds.take(1):
         print('images.shape: ', images.shape)
         # predictions = get_predictions(model, images)
         predictions = model.predict(images)
-        rows = len(predictions) // 2 if len(predictions) % 2 == 0 else len(predictions) // 2 + 1
-        for i in range(len(predictions)):
-            print('predictions[i]: ', predictions[i])
-            print('labels[i]: ', labels[i])
-            print('np.argmax(labels[i]): ', np.argmax(labels[i]))
-            ax = plt.subplot(3, rows, i + 1)
-            if model_type == 'baseline':
-                image = images[i]
+        for i in range(6):
+            ax = plt.subplot(2, 3, i + 1)
+            if model_type == 'baseline' or model_type == 'combined_baseline':
+                #image = ((images[i] + 1) / 2) * 255# denormalize image
+                image = images[i] * 255
             else:  # model_type == 'sequence' and has an extra dimension
                 image = images[0][i]
                 # normalize image

@@ -20,15 +20,29 @@ from src.utils.get_paths import get_station_paths, get_frame_paths
 # -----------------------------  EVALUATING ----------------------------------
 def evaluate_model(trainer, reports_path, model_path, visualize_predictions, learning_curve, conf_matrix, model_layout,
                    station_distribution, compare_metrics):
+    """
+    Evaluate the model from trainer by loading the best weights and running the test dataset through it.
+    Create reports and visualizations based on the evaluation if specified
+    :param trainer:
+    :param reports_path:
+    :param model_path:
+    :param visualize_predictions:
+    :param learning_curve:
+    :param conf_matrix:
+    :param model_layout:
+    :param station_distribution:
+    :param compare_metrics:
+    :return:
+    """
     print("Evaluating model: " + model_path)
-
+    steps = None # set to None to evaluate entire dataset
     config_path = os.path.join(model_path, 'config.json')
 
     config = get_config(config_path)
     train_config = config["train_config"]
 
     model = get_arch(train_config.get('model_arch'), train_config.get('instance_size'),
-                     train_config.get('num_stations'), train_config.get('seq_length'), stateful=False)
+                     train_config.get('num_stations'), stateful=False)
 
     model.compile(loss=get_loss(train_config.get('loss')), optimizer='adam',
                   metrics=['accuracy', Precision(), Recall()])
@@ -36,33 +50,34 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
     model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_partial()
 
     if trainer.model_type == 'sequence':  # create finite datasets for sequence model
-        train_ds = trainer.train_ds.take(50)
         val_ds = trainer.val_ds.take(50)
-        test_sequence_model(trainer, model, trainer.seq_length, trainer.stride, conf_matrix, reports_path, train_config)
+        steps = 50
+        test_sequence_model(trainer, model, trainer.seq_length, trainer.stride, train_config, conf_matrix, reports_path, station_distribution)
 
-    elif trainer.model_type == 'baseline':
-        train_ds = trainer.train_ds
+    elif trainer.model_type == 'baseline' or trainer.model_type == 'combined_baseline':
         val_ds = trainer.val_ds
-        test_baseline_model(trainer, model, trainer.test_ds, train_config, visualize_predictions, conf_matrix,
-                            reports_path)
+        test_baseline_model(trainer, model, train_config, visualize_predictions, conf_matrix,
+                            station_distribution, reports_path)
+        score_test = model.evaluate(trainer.test_ds, return_dict=True, steps=steps)
+        print("Model metrics using test dataset: ")
+        print(f'{"Metric":<12}{"Value"}')
+        for metric, value in score_test.items():
+            print(f'{metric:<12}{value:<.4f}')
 
     else:
         raise ValueError(f'Invalid model type: {trainer.model_type}')
 
-    score = model.evaluate(val_ds, return_dict=True, steps=50)
+
+    score_val = model.evaluate(val_ds, return_dict=True, steps=steps)
 
     print("Model metrics using validation dataset: ")
     print(f'{"Metric":<12}{"Value"}')
-    for metric, value in score.items():
+    for metric, value in score_val.items():
         print(f'{metric:<12}{value:<.4f}')
 
     # save learning curve to src/reports/figures
     if learning_curve:
         plot_learning_curve(model_path, reports_path)
-
-    if station_distribution:
-        station_distribution_figure_and_report(train_ds, val_ds, train_config.get('num_stations'),
-                                               train_config.get('stations_config'), reports_path)
 
     if compare_metrics:
         # only works if this was the last model trained
@@ -80,22 +95,28 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
 
 # -----------------------------  TESTING ----------------------------------
 
-def test_baseline_model(trainer, model, test_ds, train_config, visualize_predictions, conf_matrix, reports_path):
+def test_baseline_model(trainer, model, train_config, visualize_predictions, conf_matrix, station_distribution, reports_path):
     if visualize_predictions:
-        plot_predictions(model, test_ds, trainer.model_type, trainer.pipeline.station_names, reports_path)
+        plot_predictions(model, trainer.test_ds, trainer.model_type, trainer.pipeline.station_names, reports_path)
 
     # save confusion matrix to src/reports/figures and save classification report to src/reports
     if conf_matrix:
-        true_labels, predictions = get_test_pred_baseline(model, test_ds, trainer.num_stations)
+        true_labels, predictions = get_test_pred_baseline(model, trainer.test_ds, trainer.num_stations)
         confusion_matrix_and_report(true_labels, predictions, trainer.num_stations, train_config.get('stations_config'),
                                     reports_path)
+    if station_distribution:
+        station_distribution_figure_and_report(trainer.train_ds, trainer.val_ds, trainer.test_ds, train_config.get('num_stations'),
+                                               train_config.get('stations_config'), reports_path)
 
 
-def test_sequence_model(trainer, model, seq_length, stride, conf_matrix, reports_path, train_config):
+def test_sequence_model(trainer, model, seq_length, stride, train_config, conf_matrix, station_distribution, reports_path):
     true_labels, predictions = get_test_pred_sequence(trainer, model, seq_length, stride)
     if conf_matrix:
         confusion_matrix_and_report(true_labels, predictions, trainer.num_stations, train_config.get('stations_config'),
                                     reports_path)
+    if station_distribution: #TODO: add test_ds from get_test_pred_sequence, it is not in trainer
+        station_distribution_figure_and_report(trainer.train_ds.take(50), trainer.val_ds.take(50), trainer.test_ds, train_config.get('num_stations'),
+                                               train_config.get('stations_config'), reports_path)
 
 
 # get true labels and predictions for baseline model from the tf.data.dataset test_ds
