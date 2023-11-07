@@ -2,6 +2,7 @@ import os
 import random
 import shutil
 
+from src.data.db.db_make_new_datastructure import get_dirname_label_map, copy_directory
 from src.resources.config import *
 
 def count_files_in_subdirectories(directory):
@@ -12,7 +13,7 @@ def count_files_in_subdirectories(directory):
 
     return total_files
 
-# Use after running db_make_new_datastructure.py
+# Use after running db_make_new_datastructure.py, will work for both baseline and combined_baseline
 def baseline_test_ds():
     # remove old data structure
     if os.path.exists(test_ds_path):
@@ -36,7 +37,47 @@ def baseline_test_ds():
                 os.rename(frame_path, test_frame_path)
                 print('moved: ', frame_path, ' to ', test_frame_path)
 
-#baseline_test_ds() # generate test dataset
+#baseline_test_ds() # generate test dataset from baseline data structure
+
+def baseline_test_ds_from_patient_list():
+    baseline_test_patients = ['Patient_005', 'Patient_016', 'Patient_024', 'Patient_036']
+
+    # remove old data structure
+    if os.path.exists(test_ds_path):
+        shutil.rmtree(test_ds_path)
+
+    frame_number_dict = {'4L': 0,
+                         '4R': 0,
+                         '7L': 0,
+                         '7R': 0,
+                         '10L': 0,
+                         '10R': 0,
+                         '11L': 0,
+                         '11R': 0
+                         }
+    sequence_label_map = get_dirname_label_map(model_type, station_config_nr)
+
+    for dirname, label in sequence_label_map.items():
+        #check if the dirname contains any of the test patients strings and if so, copy the directory to the test_ds_path
+        if any(test_patient in dirname for test_patient in baseline_test_patients):
+            print(dirname, " is a test patient")
+            new_dir = os.path.join(test_ds_path, label)  # (data_path + '_new', label)
+
+            if not os.path.exists(new_dir):
+                os.makedirs(new_dir)
+                frame_number_dict[label] = 0
+
+            print(dirname, " to ", new_dir)
+            frame_number_dict = copy_directory(dirname, new_dir, label, frame_number_dict)
+            print("Copied: ", dirname, " to ", new_dir)
+            print(frame_number_dict)
+
+        else:
+            continue
+
+baseline_test_ds_from_patient_list() # generate test dataset from EBUS_Levanger dictionary
+
+
 
 def sequence_test_ds():
     # remove old data structure
