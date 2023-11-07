@@ -1,15 +1,21 @@
 import matplotlib.pyplot as plt
 import os
-import re
 from src.utils.json_parser import parse_json
 
-plt.style.use('dark_background')
-
 def plot_compare_metrics(model_paths, model_names, reports_path):
+    """
+    Plot metrics (loss, accuracy, precision, recall) for training and validation datasets for multiple models
+    :param model_paths:
+    :param model_names:
+    :param reports_path:
+    :return:
+    """
 
     # create a figure with 4 subplots
+    plt.style.use('ggplot')
     fig, axs = plt.subplots(2, 2, figsize=(10, 10))
     fig.suptitle('Training and Validation Metrics')
+    colors = ['#fb8072', '#fdb462']
 
     # iterate over the history files
     for model_path in (model_paths):
@@ -28,14 +34,14 @@ def plot_compare_metrics(model_paths, model_names, reports_path):
         model_time = os.path.basename(model_path)
 
         # plot and label the training and validation loss values
-        axs[0, 0].plot(epochs, train_loss, label=model_time + ' Training')
-        axs[0, 0].plot(epochs, val_loss, label=model_time + ' Validation')
-        axs[0, 1].plot(epochs, train_accuracy, label=model_time + ' Training')
-        axs[0, 1].plot(epochs, val_accuracy, label=model_time + ' Validation')
-        axs[1, 0].plot(epochs, train_precision, label=model_time + ' Training')
-        axs[1, 0].plot(epochs, val_precision, label=model_time + ' Validation')
-        axs[1, 1].plot(epochs, train_recall, label=model_time + ' Training')
-        axs[1, 1].plot(epochs, val_recall, label=model_time + ' Validation')
+        axs[0, 0].plot(epochs, train_loss, label=model_time + ' Training', color=colors[0])
+        axs[0, 0].plot(epochs, val_loss, label=model_time + ' Validation', color=colors[1])
+        axs[0, 1].plot(epochs, train_accuracy, label=model_time + ' Training', color=colors[0])
+        axs[0, 1].plot(epochs, val_accuracy, label=model_time + ' Validation', color=colors[1])
+        axs[1, 0].plot(epochs, train_precision, label=model_time + ' Training', color=colors[0])
+        axs[1, 0].plot(epochs, val_precision, label=model_time + ' Validation', color=colors[1])
+        axs[1, 1].plot(epochs, train_recall, label=model_time + ' Training', color=colors[0])
+        axs[1, 1].plot(epochs, val_recall, label=model_time + ' Validation', color=colors[1])
 
     # add in a title and axes labels
     axs[0, 0].set_title('Loss')
@@ -61,4 +67,4 @@ def plot_compare_metrics(model_paths, model_names, reports_path):
     fig_path = os.path.join(reports_path, 'figures/')
     os.makedirs(fig_path, exist_ok=True)
     #save the figure including the model names
-    fig.savefig(fig_path + 'compare_metrics_' + '-'.join(model_names) + '.png')
+    fig.savefig(fig_path + 'compare_metrics_' + '-'.join(model_names) + '.png', bbox_inches='tight')

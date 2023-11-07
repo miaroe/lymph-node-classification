@@ -1,23 +1,32 @@
 from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import os
-
-plt.style.use('dark_background')
-
+import matplotlib.pyplot as plt
 
 def confusion_matrix_and_report(true_labels, predictions, num_stations, stations_config, reports_path):
+    """
+    Plot confusion matrix and save classification report to csv
+    :param true_labels:
+    :param predictions:
+    :param num_stations:
+    :param stations_config:
+    :param reports_path:
+    :return:
+    """
     # -------------------------------------------- FIGURE --------------------------------------------
+    plt.style.use('classic')
+    plt.figure(figsize=(10, 10))
+    plt.grid(False)
 
     cm = confusion_matrix(true_labels, predictions)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm,
                                   display_labels=list(stations_config.keys()))
-    disp.plot()
+
+    disp.plot(cmap='Blues')
 
     fig_path = os.path.join(reports_path, 'figures/')
     os.makedirs(fig_path, exist_ok=True)
-    disp.figure_.savefig(fig_path + 'confusion_matrix.png')
+    disp.figure_.savefig(fig_path + 'confusion_matrix.png', bbox_inches='tight')
 
     # -------------------------------------------- REPORT --------------------------------------------
 

@@ -3,10 +3,14 @@ import os
 from src.utils.json_parser import parse_json
 import pandas as pd
 
-plt.style.use('dark_background')
-
 def plot_learning_curve(model_path, reports_path):
-
+    """
+    Plot the learning curve for a given model
+    :param model_path:
+    :param reports_path:
+    :return:
+    """
+    plt.style.use('ggplot')
     results = parse_json(os.path.join(model_path + "results.json"))['0']
 
     train_loss = [entry['loss'] for entry in results]
@@ -14,10 +18,11 @@ def plot_learning_curve(model_path, reports_path):
     epochs = range(1, len(train_loss) + 1)
 
     fig = plt.figure(figsize=(10, 5))
+    colors = ['#fb8072', '#fdb462']
 
     # Plot and label the training and validation loss values
-    plt.plot(epochs, train_loss, label='Training Loss')
-    plt.plot(epochs, val_loss, label='Validation Loss')
+    plt.plot(epochs, train_loss, label='Training Loss', color=colors[0])
+    plt.plot(epochs, val_loss, label='Validation Loss', color=colors[1])
 
     # Add in a title and axes labels
     plt.title('Training and Validation Loss')
@@ -31,4 +36,4 @@ def plot_learning_curve(model_path, reports_path):
 
     fig_path = os.path.join(reports_path, 'figures/')
     os.makedirs(fig_path, exist_ok=True)
-    plt.savefig(fig_path + 'learning_curve.png')
+    plt.savefig(fig_path + 'learning_curve.png', dpi=300, bbox_inches='tight')
