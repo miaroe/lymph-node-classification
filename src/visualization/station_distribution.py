@@ -15,7 +15,7 @@ def station_distribution_figure_and_report(train_ds, val_ds, test_ds, num_statio
     :param reports_path:
     :return:
     """
-    plt.style.use('ggplot')
+    plt.style.use('classic')
     fig, ax = plt.subplots(figsize=(16, 10))
     text_kwargs = {'fontsize': 13, 'horizontalalignment': 'center'}
     width = 0.3  # width of bars
@@ -34,21 +34,25 @@ def station_distribution_figure_and_report(train_ds, val_ds, test_ds, num_statio
 
         for j in x:
             ax.text(x=j + offset, y=relative_frequency[j] + width,
-                     s=str(np.round(relative_frequency[j], 1)) + '%', **text_kwargs)
+                    s=str(count_array[j]), **text_kwargs)
+                    #s=str(np.round(relative_frequency[j], 1)) + '%', **text_kwargs)
 
         ax.set_xticks(x + width / 2)
         ax.set_xticklabels(stations_config.keys(), fontsize=14)
         ax.legend(fontsize=16)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.tick_params(top=False, right=False)
 
         plt.xlabel('Lymph node station', fontsize=20)
         plt.ylabel('Frequency (%)', fontsize=20)
-        ax.set_ylim(0, 32)
+        ax.set_ylim(0, 27)
         ax.set_xlim(-0.5, len(relative_frequency) - 0.2)
 
         # Save figure to reports folder
         fig_path = os.path.join(reports_path, 'figures/')
         os.makedirs(fig_path, exist_ok=True)
-        plt.savefig(fig_path + 'station_distribution.png', bbox_inches='tight')
+        plt.savefig(fig_path + 'station_distribution.png', bbox_inches='tight', dpi=300)
 
 
         # -------------------------------------------- REPORT --------------------------------------------

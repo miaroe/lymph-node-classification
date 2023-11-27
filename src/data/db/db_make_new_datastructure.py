@@ -35,6 +35,9 @@ def get_dirname_label_map(model_type, station_config_nr):
         path = row['format']
         patient = row['subject_id']
         label = row['label']
+        if station_config_nr == 4: # without 10L
+            if label == '10L' or label == '7':
+                continue
         if station_config_nr == 5: # combine 7L and 7R
             if label == '7L' or label == '7R':
                 label = '7'
@@ -146,6 +149,7 @@ def create_new_datastructure_from_df(df, baseline_dir, dirname_quality_map, stat
                 # copying all files from the source directory to destination directory
                 frame_number_dict = copy_directory(dirname, new_dir, label, frame_number_dict)
                 print("Copied: ", dirname, " to ", new_dir)
+                print("frame_number_dict: ", frame_number_dict)
 
         else:
             # copying all files from the source directory to destination directory

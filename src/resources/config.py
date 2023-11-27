@@ -71,31 +71,34 @@ def get_num_stations(station_config_nr):
 
 # -----------------------------  TRAINING PARAMETERS ----------------------------------
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"  # whether to use GPU for training (-1 == no GPU, else GPU)
+os.environ['CUDA_VISIBLE_DEVICES'] = "2"  # whether to use GPU for training (-1 == no GPU, else GPU)
 os.environ['CUDA_DEVICE_ORDER'] = "PCI_BUS_ID"
 
 perform_training = True
+
 model_type = 'combined_baseline'  # baseline, combined_baseline or sequence
-epochs = 200
-steps_per_epoch = 200
-validation_steps = 50
-stride = 4
-batch_size = 32
-patience = 20
-filter_data = False # only includes sequences labeled as 'good' and 'ok'
-augment = True
-img_size = 256
-station_config_nr = 6  # class configuration (gives mapping and mapped labels)
+station_config_nr = 3  # class configuration (gives mapping and mapped labels)
 stations_config = get_stations_config(station_config_nr)
 num_stations = get_num_stations(station_config_nr)
+filter_data = False # only includes sequences labeled as 'good' and 'ok'
+
+img_size = 256
+instance_size = (img_size, img_size, 3)
+augment = True
+epochs = 200
+batch_size = 32
+patience = 20
 model_arch = "cvc_net"  # which architecture/CNN to use - see models.py for info about archs
 loss = 'categoricalCrossEntropy' # binaryCrossEntropy for binary, categoricalCrossEntropy / focalCrossEntropy for multiclass
-
+learning_rate = 0.0001  # relevant for the optimizer, Adam used by default (with default lr=1e-3), I normally use 1e-4 when finetuning
 stratified_cv = False
 test_split = 0.1
 validation_split = 0.2
-instance_size = (img_size, img_size, 3)  # Default: (299, 299, 1). Set this to (299, 299, 1) to not downsample further.
-learning_rate = 0.0001  # relevant for the optimizer, Adam used by default (with default lr=1e-3), I normally use 1e-4 when finetuning
+
+# for sequence model
+steps_per_epoch = 200
+validation_steps = 50
+stride = 4
 seq_length = 10  # number of frames in each sequence
 
 date = datetime.today().strftime('%Y-%m-%d')

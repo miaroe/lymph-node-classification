@@ -118,8 +118,9 @@ class BaselineTrainer:
             for i in range(9):
                 ax = plt.subplot(3, 3, i + 1)
                 # normalize image from range [-1, 1] to [0, 1]
-                #image = (images[i] + 1) / 2
-                plt.imshow(images[i])
+                image = (images[i] + 1) / 2
+                #image = images[i] / 255
+                plt.imshow(image)
                 plt.axis("off")
                 if self.num_stations > 2:
                     plt.title(self.pipeline.station_names[np.argmax(labels[i])] + ' train')

@@ -6,10 +6,16 @@ import matplotlib.ticker as mtick
 from src.data.full_video_label_dict import get_frame_label_dict
 from src.resources.config import local_full_video_path
 
-plt.style.use('dark_background')
-
 
 def plot_pred_stations(station_labels, pred, frame):
+    """
+    plot top three predicted stations and their probabilities, save as numpy array
+    :param station_labels:
+    :param pred:
+    :param frame:
+    :return:
+    """
+    plt.style.use('ggplot')
     fig = plt.figure(figsize=(10, 5))
     plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))
 
