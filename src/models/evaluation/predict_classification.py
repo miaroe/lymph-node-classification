@@ -7,10 +7,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from src.resources.config import get_stations_config
+from src.visualization.confusion_matrix import confusion_matrix_and_report
 
-dirname_test_df = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs/test_dirname_label_df.csv'
-model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-02/16:04:32'
+dirname_test_df = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs/test_dirname_label_df_6.csv'
+model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-24/15:06:38'
+reports_path = '/home/miaroe/workspace/lymph-node-classification/reports/2023-11-24/15:06:38/'
 model_name = 'best_model'
+stations_config_nr = 6
 
 # local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/EBUS_Levanger_full_videos/Patient_036/Sequence_001'
 local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/baseline/Levanger_and_StOlavs/test/full_video'
@@ -67,6 +70,8 @@ def predict_classification_per_station(dirname_test_df, model_path, model_name, 
         print('dirname:', dirname)
 
         prediction_per_image_arr = []
+        num_correct_threshold = 0
+        num_frames = 0
 
         # loop through the images in the dirname and predict
         for image_name in os.listdir(dirname):
@@ -79,6 +84,7 @@ def predict_classification_per_station(dirname_test_df, model_path, model_name, 
 
                 prediction_per_image = model.predict(img_array)
                 prediction_per_image_arr.append(prediction_per_image)
+                num_frames += 1
 
 
         prediction_per_station_arr = np.mean(prediction_per_image_arr, axis=0)
@@ -88,6 +94,12 @@ def predict_classification_per_station(dirname_test_df, model_path, model_name, 
         prediction_station = labels[np.argmax(prediction_per_station_arr)]
         #print('prediction_station:', prediction_station)
         #print('station:', station)
+
+        for prediction in prediction_per_image_arr:
+            if np.max(prediction) > 0.5:
+                prediction_station = labels[np.argmax(prediction)]
+                if prediction_station == station:
+                    num_correct_threshold += 1
 
         if prediction_station != station:
             print('prediction_station:', prediction_station)
@@ -100,20 +112,35 @@ def predict_classification_per_station(dirname_test_df, model_path, model_name, 
         station_predictions.append({'dirname': dirname, 'patient_id': patient_id, 'station': station,
                                                           'prediction_values_arr': prediction_per_station_arr,
                                                           'prediction_value': prediction_value,
-                                                          'prediction_station': prediction_station})
+                                                          'prediction_station': prediction_station,
+                                                          'num_correct_threshold': num_correct_threshold / num_frames})
 
     station_predictions_df = pd.DataFrame(station_predictions)
 
     # save in model_path
     station_predictions_df.to_csv(os.path.join(model_path, 'station_predictions.csv'), index=False)
 
+    # create confusion matrix
+    stations_config = get_stations_config(stations_config_nr)
+    true_labels = station_predictions_df['station']
+    true_labels = [true_labels[i] for i in range(len(true_labels))]
+    predicted_labels = station_predictions_df['prediction_station']
+    predicted_labels = [predicted_labels[i] for i in range(len(predicted_labels))]
+
+    # use stations config to get the numbers of the labels
+    for i in range(len(true_labels)):
+        true_labels[i] = stations_config[true_labels[i]]
+        predicted_labels[i] = stations_config[predicted_labels[i]]
+    print('true_labels:', true_labels)
+    print('predicted_labels:', predicted_labels)
+    confusion_matrix_and_report(true_labels, predicted_labels, len(labels), stations_config, reports_path, 'avg_')
 
 
     print('num_correct:', len(station_predictions_df[station_predictions_df['station'] == station_predictions_df['prediction_station']]))
     print('num_total:', len(station_predictions_df))
     print('percent_correct:', len(station_predictions_df[station_predictions_df['station'] == station_predictions_df['prediction_station']]) / len(station_predictions_df) * 100)
 
-predict_classification_per_station(dirname_test_df, model_path, model_name, labels=list(get_stations_config(6).keys()))
+predict_classification_per_station(dirname_test_df, model_path, model_name, labels=list(get_stations_config(stations_config_nr).keys()))
 
 def compare_predictions_to_labels(model_path):
     station_predictions_df = pd.read_csv(os.path.join(model_path, 'station_predictions.csv'), sep=',')
@@ -164,7 +191,7 @@ def plot_misclassified_images(video_path, model_path, model_name, labels):
     plt.style.use('ggplot')
     misclassified_images = []
 
-    # get dicttionaries with frame labels and predictions
+    # get dictionaries with frame labels and predictions
     frame_pred_dict = make_frame_pred_dict(video_path, model_path, model_name)
     frame_label_dict = get_frame_label_dict_modified(video_path)
     print('number of frames in total:', len(frame_pred_dict))

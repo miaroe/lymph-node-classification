@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 
-def confusion_matrix_and_report(true_labels, predictions, num_stations, stations_config, reports_path):
+def confusion_matrix_and_report(true_labels, predictions, num_stations, stations_config, reports_path, name):
     """
     Plot confusion matrix and save classification report to csv
     :param true_labels:
@@ -26,7 +26,7 @@ def confusion_matrix_and_report(true_labels, predictions, num_stations, stations
 
     fig_path = os.path.join(reports_path, 'figures/')
     os.makedirs(fig_path, exist_ok=True)
-    disp.figure_.savefig(fig_path + 'confusion_matrix.png', bbox_inches='tight')
+    disp.figure_.savefig(fig_path + name + 'confusion_matrix.png', bbox_inches='tight')
 
     # -------------------------------------------- REPORT --------------------------------------------
 
@@ -39,4 +39,4 @@ def confusion_matrix_and_report(true_labels, predictions, num_stations, stations
     # save report to csv
     df = pd.DataFrame(report).transpose()
     os.makedirs(reports_path, exist_ok=True)
-    df.to_csv(reports_path + 'report.csv', index=True, sep='\t')
+    df.to_csv(reports_path + name + 'report.csv', index=True, sep='\t')

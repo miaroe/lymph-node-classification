@@ -81,10 +81,11 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
 
     if compare_metrics:
         # only works if this was the last model trained
-        current_dir = get_latest_date_time('/home/miaroe/workspace/lymph-node-classification/output/models/')
-        print('current_dir: ', current_dir)
-        model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in
-                       [current_dir]]  # to compare multiple models, add more paths manually
+        #current_dir = get_latest_date_time('/home/miaroe/workspace/lymph-node-classification/output/models/')
+        #print('current_dir: ', current_dir)
+        #model_paths = ['/home/miaroe/workspace/lymph-node-classification/output/models/' + model for model in
+        #               [current_dir]]  # to compare multiple models, add more paths manually
+        model_paths = [model_path]
         model_names = [trainer.model_arch]  # saved in filename
         plot_compare_metrics(model_paths, model_names, reports_path)
 
@@ -103,7 +104,7 @@ def test_baseline_model(trainer, model, train_config, visualize_predictions, con
     if conf_matrix:
         true_labels, predictions = get_test_pred_baseline(model, trainer.test_ds, trainer.num_stations)
         confusion_matrix_and_report(true_labels, predictions, trainer.num_stations, train_config.get('stations_config'),
-                                    reports_path)
+                                    reports_path, 'frame_')
     if station_distribution:
         station_distribution_figure_and_report(trainer.train_ds, trainer.val_ds, trainer.test_ds, train_config.get('num_stations'),
                                                train_config.get('stations_config'), reports_path)
@@ -113,7 +114,7 @@ def test_sequence_model(trainer, model, seq_length, stride, train_config, conf_m
     true_labels, predictions = get_test_pred_sequence(trainer, model, seq_length, stride)
     if conf_matrix:
         confusion_matrix_and_report(true_labels, predictions, trainer.num_stations, train_config.get('stations_config'),
-                                    reports_path)
+                                    reports_path, 'sequence_')
     if station_distribution: #TODO: add test_ds from get_test_pred_sequence, it is not in trainer
         station_distribution_figure_and_report(trainer.train_ds.take(50), trainer.val_ds.take(50), trainer.test_ds, train_config.get('num_stations'),
                                                train_config.get('stations_config'), reports_path)
