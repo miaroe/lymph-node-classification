@@ -4,6 +4,7 @@ import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 import random
+import matplotlib.pyplot as plt
 
 from src.resources.augmentation import GammaTransform, ContrastScale, Blur, BrightnessTransform, GaussianShadow, \
     RandomAugmentation, Rotation, NonLinearMap
@@ -50,7 +51,7 @@ class BaselineClassificationPipeline(ClassificationPipeline):
             seed=123,
             labels='inferred',
             label_mode=self.get_label_mode(),
-            color_mode='rgb',
+            color_mode='rgb', # 'grayscale' or 'rgb' (1 or 3 channels)
             class_names=self.station_names,
             batch_size=self.batch_size,
             image_size=self.image_shape,
@@ -81,8 +82,8 @@ class BaselineClassificationPipeline(ClassificationPipeline):
 
 
         self.train_ds = self.prepare(train_ds, augment=self.augment)
-        self.val_ds = self.prepare(val_ds, augment=False)  # no augmentation for validation and test data
-        self.test_ds = self.prepare(test_ds, augment=False)
+        self.val_ds = self.prepare(val_ds)  # no augmentation or shuffling for validation and test data
+        self.test_ds = self.prepare(test_ds)
 
         '''
         # Used to test operations
@@ -96,10 +97,16 @@ class BaselineClassificationPipeline(ClassificationPipeline):
         plt.imshow(first_image)
         plt.title('training' + str(labels_batch[0]))
         plt.show()
+        
+
+        plt.figure(figsize=(10, 10))
+        for images, labels in self.train_ds.take(3):
+            for i in range(32):
+                ax = plt.subplot(6, 6, i + 1)
+                plt.imshow(images[i])
+                plt.axis("off")
+            plt.show()
         '''
-
-
-
 
         return self.train_ds, self.val_ds, self.test_ds
 
@@ -117,6 +124,18 @@ class BaselineClassificationPipeline(ClassificationPipeline):
             label_mode = 'int'
         return label_mode
 
+    def data_augmentation(self, x):
+        augmentation_layers = [GammaTransform(low=0.5, high=1.5), Blur(sigma_max=1.5), NonLinearMap(),
+                               Rotation(max_angle=30),
+                               GaussianShadow(sigma_x=(0.1, 0.5), sigma_y=(0.1, 0.9), strength=(0.5, 0.8))]
+        return RandomAugmentation(augmentation_layers)(x)
+
+
+    @tf.function
+    def data_augmentation_map(self, x, y):
+        augmented_x = tf.py_function(func=self.data_augmentation, inp=[x], Tout=tf.float32)
+        return augmented_x, y
+
     def prepare(self, ds, augment=False):
         AUTOTUNE = tf.data.experimental.AUTOTUNE
         # adapted from https://www.tensorflow.org/tutorials/images/transfer_learning,
@@ -124,20 +143,16 @@ class BaselineClassificationPipeline(ClassificationPipeline):
         # https://www.tensorflow.org/tutorials/images/data_augmentation
 
         rescale = tf.keras.Sequential([
-            # tf.keras.layers.Rescaling(1. / 127.5, offset=-1)  # specific for mobilenet TODO: change for other models
+            #tf.keras.layers.Rescaling(1. / 127.5, offset=-1)  # specific for mobilenet TODO: change for other models
             tf.keras.layers.Rescaling(1. / 255.0)
         ])
+
         '''
         data_augmentation = tf.keras.Sequential([
             tf.keras.layers.RandomRotation(0.1),  # rotating by a random amount in the range [-10% * 2pi, 10% * 2pi]
             tf.keras.layers.RandomContrast(0.1)  # (x - mean) * contrast_factor + mean
         ])
         '''
-
-
-        augmentation_layers = [GammaTransform(low=0.5, high=1.5), Blur(sigma_max=1.5), NonLinearMap()]
-                               #Rotation(max_angle=30), GaussianShadow(sigma_x=(0.1, 0.5), sigma_y=(0.1, 0.9), strength=(0.5, 0.8))]
-        data_augmentation = RandomAugmentation(augmentation_layers)
 
         # Rescale all datasets.
         ds = ds.map(lambda x, y: (rescale(x), y), num_parallel_calls=AUTOTUNE)
@@ -146,7 +161,14 @@ class BaselineClassificationPipeline(ClassificationPipeline):
             # Use data augmentation only on the training set.
             #ds = ds.map(lambda x, y: (data_augmentation(x, training=True), y), num_parallel_calls=AUTOTUNE)
             #ds = ds.map(lambda x, y: (data_augmentation(x), y), num_parallel_calls=AUTOTUNE)
-            ds = ds.map(lambda x, y: (tf.py_function(func=data_augmentation, inp=[x], Tout=tf.float32), y), num_parallel_calls=tf.data.AUTOTUNE)
+            ds = ds.unbatch() # augmentation is applied to each image separately
+            ds = ds.map(self.data_augmentation_map, num_parallel_calls=AUTOTUNE)
+            ds = ds.batch(self.batch_size)
+
+        # scale to [-1, 1]
+        #ds = ds.map(lambda x, y: (x * 2. - 1., y), num_parallel_calls=AUTOTUNE)
+        # scale to [0, 255]
+        #ds = ds.map(lambda x, y: (x * 255., y), num_parallel_calls=AUTOTUNE)
 
         # Use buffered prefetching on all datasets.
         return ds.prefetch(buffer_size=AUTOTUNE)

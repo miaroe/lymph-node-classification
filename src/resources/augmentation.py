@@ -25,7 +25,7 @@ class GammaTransform(layers.Layer):
         super().__init__(**kwargs)
         self.low = low
         self.high = high
-        self._random_gamma = None
+        self._random_gamma = 1.0
 
     def randomize(self):
         self._random_gamma = np.random.uniform(self.low, self.high)
@@ -40,7 +40,7 @@ class ContrastScale(layers.Layer):
         super().__init__(**kwargs)
         self.min_scale = min_scale
         self.max_scale = max_scale
-        self._random_scale = None
+        self._random_scale = 0.0
 
     def randomize(self):
         self._random_scale = np.random.uniform(self.min_scale, self.max_scale)
@@ -55,7 +55,7 @@ class Blur(layers.Layer):
         super().__init__(**kwargs)
         self.sigma_max = sigma_max
         self.sigma_min = sigma_min
-        self._random_sigma = None
+        self._random_sigma = 0.0
 
     def randomize(self):
         self._random_sigma = np.random.uniform(self.sigma_min, self.sigma_max)
@@ -69,7 +69,7 @@ class BrightnessTransform(layers.Layer):
     def __init__(self, max_scale=0.2, **kwargs):
         super().__init__(**kwargs)
         self.max_scale = max_scale
-        self._random_scale = None
+        self._random_scale = 0.0
 
     def randomize(self):
         self._random_scale = np.random.uniform(-self.max_scale, self.max_scale)
@@ -102,10 +102,10 @@ class GaussianShadow(layers.Layer):
         self.strength = strength
         self.location = location
 
-        self._random_sigma_x = None
-        self._random_sigma_y = None
-        self._random_strength = None
-        self._random_location = None
+        self._random_sigma_x = 0.0
+        self._random_sigma_y = 0.0
+        self._random_strength = 0.0
+        self._random_location = 0.0
 
     def randomize(self):
         self._random_sigma_x = np.random.uniform(self.sigma_x[0], self.sigma_x[1], 1).astype(np.float32)
@@ -150,9 +150,12 @@ class Rotation(layers.Layer):
     def __init__(self, max_angle=15, flow_indices=None, segmentation_indices=None, **kwargs):
         super().__init__(**kwargs)
         self.max_angle = max_angle
-        self._random_angle = None
+        self._random_angle = 0
         self.flow_indices = flow_indices
         self.segmentation_indices = segmentation_indices
+
+    def randomize(self):
+        self._random_angle = np.random.randint(-self.max_angle, self.max_angle)
 
     def call(self, data, data_index=None, *args, **kwargs):
         #print('Rotation: ', self._random_angle)
@@ -175,9 +178,6 @@ class Rotation(layers.Layer):
             rot_mat = np.array(((c, -s), (s, c)))
             data = data.dot(rot_mat)
         return data
-
-    def randomize(self):
-        self._random_angle = np.random.randint(-self.max_angle, self.max_angle)
 
 class NonLinearMap(layers.Layer):
     def __init__(self, alpha=0.544559, beta=1.686562, gamma=5.598193, delta=0.638681, y0=0.002457387314, **kwargs):
