@@ -35,26 +35,39 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         model.add(Activation('relu'))
         model.add(Dense(num_stations, activation='softmax'))
 
-    elif model_arch == "inception":
+    elif model_arch == "inception": # scale to [-1, 1]
         # InceptionV3 (typical example arch) - personal preference for CNN classification (however, quite expensive and might be overkill in a lot of scenarios)
-        some_input = Input(shape=instance_size)
-        base_model = InceptionV3(include_top=False, weights="imagenet", pooling=None, input_tensor=some_input)
+        base_model = InceptionV3(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
         base_model.trainable = False
-        x = base_model.output
-        x = Flatten()(x)
-        x = Dense(64)(x)
-        x = BatchNormalization()(x)
-        x = Dropout(0.5)(x)
-        x = Activation('relu')(x)
-        x = Dense(num_stations, activation='softmax')(x)
-        model = Model(inputs=base_model.input,
-                      outputs=x)  # example of creation of TF-Keras model using the functional API
 
-    elif model_arch == "resnet":
+        for layer in base_model.layers[249:]:
+            if not isinstance(layer, BatchNormalization):
+                layer.trainable = True
+
+        # Make sure the correct layers are frozen
+        for i, layer in enumerate(base_model.layers):
+            print(i, layer.name, layer.trainable)
+
+        x = base_model.output
+        x = tf.keras.layers.GlobalMaxPooling2D()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        x = Dense(num_stations, activation='softmax')(x)
+        model = Model(inputs=base_model.input, outputs=x)
+
+    elif model_arch == "resnet": # scale [0, 255]
         # ResNet-50, another very popular arch, can be done similarly as for InceptionV3 above
-        some_input = Input(shape=instance_size)
-        base_model = ResNet50(include_top=False, weights="imagenet", pooling=None, input_tensor=some_input)
-        #base_model.trainable = False
+
+        base_model = ResNet50(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
+        base_model.trainable = False
+
+        #for layer in base_model.layers[143:]:
+        #    if not isinstance(layer, BatchNormalization):
+        #        layer.trainable = True
+
+        # Make sure the correct layers are frozen
+        for i, layer in enumerate(base_model.layers):
+            print(i, layer.name, layer.trainable)
+
         x = base_model.output
         x = tf.keras.layers.GlobalMaxPooling2D()(x)
         x = tf.keras.layers.Dropout(0.3)(x)
@@ -87,28 +100,23 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         model = Model(inputs=base_model.input,
                       outputs=[y1, y2])  # example of multi-task network through the functional API
 
-    elif model_arch == "mobilenet":
-        # MobileNetV2
-        # For now copied recipe from above and replaced model with MobileNetV2
-        some_input = Input(shape=instance_size)
-        base_model = MobileNetV2(
-            # input_shape=None, alpha=1.0,
-            include_top=False, weights="imagenet",
-            input_tensor=some_input, pooling=None,
-            # classes=1000, classifier_activation="softmax",
-        )
+    elif model_arch == "mobilenetV2": # scale to [-1, 1]
+        base_model = MobileNetV2(include_top=False, weights="imagenet", input_shape=instance_size, pooling=None)
 
-        base_model.trainable = False  # Freeze model
+        #base_model.trainable = False
+
+        for layer in base_model.layers[:-11]:
+            layer.trainable = False
+
+        # Make sure the correct layers are frozen
+        for i, layer in enumerate(base_model.layers):
+            print(i, layer.name, layer.trainable)
 
         x = base_model.output
-        x = Flatten()(x)
-        x = Dense(64)(x)
-        x = BatchNormalization()(x)
-        x = Dropout(0.5)(x)
-        x = Activation('relu')(x)
+        x = tf.keras.layers.GlobalMaxPooling2D()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
         x = Dense(num_stations, activation='softmax')(x)
-        model = Model(inputs=base_model.input,
-                      outputs=x)  # example of creation of TF-Keras model using the functional API
+        model = Model(inputs=base_model.input, outputs=x)
 
     elif model_arch == "mobileNetV3Small":
 
@@ -123,7 +131,7 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         #                                               weights='imagenet')
 
         base_model = tf.keras.applications.MobileNetV3Small(input_shape=instance_size, include_top=False,
-                                                            weights='imagenet', include_preprocessing=False,
+                                                            weights='imagenet', include_preprocessing=True,
                                                             minimalistic=True, dropout_rate=0.4)
 
         for layer in base_model.layers[:-6]:
@@ -147,8 +155,6 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
 
         base_model = CVCNet(include_top=False, input_shape=instance_size, classes=num_stations, dropout_rate=0.4)
 
-        #base_model.trainable = False
-
         x = base_model.output
         x = Conv2D(num_stations, (1, 1))(x)
         x = PReLU()(x)
@@ -158,17 +164,23 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         model = Model(inputs=base_model.input,
                       outputs=x)
 
-    elif model_arch == "vgg16":
+    elif model_arch == "vgg16": # scale [0, 255]
         base_model = VGG16(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
         #base_model.trainable = False
-        some_input = tf.keras.Input(shape=instance_size)
-        x = tf.keras.applications.vgg16.preprocess_input(some_input)
+        for layer in base_model.layers[:-4]:
+            layer.trainable = False
 
-        x = base_model(x)
+        # Make sure the correct layers are frozen
+        for i, layer in enumerate(base_model.layers):
+            print(i, layer.name, layer.trainable)
+
+        #inputs = tf.keras.Input(shape=instance_size)
+        #x = tf.keras.applications.vgg16.preprocess_input(inputs)
+        x = base_model.output
         x = GlobalMaxPooling2D()(x)
         x = Dropout(0.5)(x)
         x = Dense(num_stations, activation='softmax')(x)
-        model = Model(inputs=some_input,
+        model = Model(inputs=base_model.input,
                       outputs=x)
 
 
@@ -187,14 +199,14 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
                       outputs=x)
 
     elif model_arch== "efficientnet":
-        inputs = tf.keras.Input(shape=instance_size)
-        base_model = tf.keras.applications.efficientnet.EfficientNetB0(include_top=False, weights="imagenet", input_tensor=inputs)
+
+        base_model = tf.keras.applications.efficientnet.EfficientNetB0(include_top=False, weights="imagenet", input_shape=instance_size)
         base_model.trainable = False
 
         # We unfreeze the top 20 layers while leaving BatchNorm layers frozen
-        for layer in base_model.layers[-10:]:
-            if not isinstance(layer, BatchNormalization):
-                layer.trainable = True
+        #for layer in base_model.layers[-16:]:
+        #    if not isinstance(layer, BatchNormalization):
+        #        layer.trainable = True
 
         # Make sure the correct layers are frozen
         for i, layer in enumerate(base_model.layers):
@@ -202,10 +214,51 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
 
         x = base_model.output
         x = GlobalMaxPooling2D()(x)
-        x = BatchNormalization()(x)
         x = Dropout(0.5)(x)
         x = Dense(num_stations, activation='softmax')(x)
-        model = Model(inputs=inputs,
+        model = Model(inputs=base_model.input,
+                      outputs=x)
+
+    elif model_arch == "xception":
+
+        base_model = tf.keras.applications.xception.Xception(include_top=False, weights="imagenet", input_shape=instance_size)
+        base_model.trainable = False
+
+        # We unfreeze the top 16 layers while leaving BatchNorm layers frozen
+        for layer in base_model.layers[-16:]:
+           if not isinstance(layer, BatchNormalization):
+               layer.trainable = True
+
+        # Make sure the correct layers are frozen
+        for i, layer in enumerate(base_model.layers):
+            print(i, layer.name, layer.trainable)
+
+        x = base_model.output
+        x = GlobalMaxPooling2D()(x)
+        x = Dropout(0.5)(x)
+        x = Dense(num_stations, activation='softmax')(x)
+        model = Model(inputs=base_model.input,
+                      outputs=x)
+
+    elif model_arch == "inception_resnet_v2":
+
+        base_model = tf.keras.applications.inception_resnet_v2.InceptionResNetV2(include_top=False, weights="imagenet", input_shape=instance_size)
+        base_model.trainable = False
+
+        # We unfreeze the top 20 layers while leaving BatchNorm layers frozen
+        for layer in base_model.layers[-6:]:
+           if not isinstance(layer, BatchNormalization):
+               layer.trainable = True
+
+        # Make sure the correct layers are frozen
+        for i, layer in enumerate(base_model.layers):
+            print(i, layer.name, layer.trainable)
+
+        x = base_model.output
+        x = GlobalMaxPooling2D()(x)
+        x = Dropout(0.5)(x)
+        x = Dense(num_stations, activation='softmax')(x)
+        model = Model(inputs=base_model.input,
                       outputs=x)
 
 
