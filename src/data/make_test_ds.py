@@ -1,8 +1,7 @@
-import os
 import random
 import shutil
 
-from src.data.db.db_make_new_datastructure import get_dirname_label_map, copy_directory
+from src.data.make_new_datastructure import get_dirname_label_map, copy_directory_baseline
 from src.resources.config import *
 
 def count_files_in_subdirectories(directory):
@@ -68,7 +67,7 @@ def baseline_test_ds_from_patient_list():
                 frame_number_dict[label] = 0
 
             print(dirname, " to ", new_dir)
-            frame_number_dict = copy_directory(dirname, new_dir, label, frame_number_dict)
+            frame_number_dict = copy_directory_baseline(dirname, new_dir, label, frame_number_dict)
             print("Copied: ", dirname, " to ", new_dir)
             print(frame_number_dict)
 
