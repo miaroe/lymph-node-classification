@@ -29,6 +29,10 @@ def get_metrics_dfs():
     disp.plot(cmap=plt.cm.Blues)
     plt.show()
 
+    # calculate accuracy
+    accuracy = accuracy_score(y_true, y_pred)
+    print(f'Accuracy: {accuracy:}')
+
 
 
 
@@ -39,7 +43,7 @@ def get_metrics_dfs():
 
         # Calculate accuracy
         accuracy = accuracy_score(y_true, y_pred)
-        print(f'Accuracy: {accuracy:}')
+        #print(f'Accuracy: {accuracy:}')
 
         # Calculate precision
         precision = precision_score(y_true, y_pred, average='weighted')

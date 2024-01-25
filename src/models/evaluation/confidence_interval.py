@@ -10,10 +10,10 @@ from src.resources.loss import get_loss
 from src.resources.ml_models import get_arch
 
 model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-25/17:12:56/'
-num_test_images = 2210
+num_test_images = 2158
 num_stations = 8
 model_arch = 'cvc_net'
-
+'''
 stations_config = get_stations_config(3)
 print(list(stations_config.keys()))
 
@@ -45,7 +45,8 @@ model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_parti
 score = model.evaluate(test_ds, return_dict=True, verbose=1)
 acc_test = score['accuracy']
 print('acc_test: ', acc_test)
-
+'''
+acc_test = 66.66666666666666 / 100
 confidence = 0.95  # Change to your desired confidence level
 z_value = scipy.stats.norm.ppf((1 + confidence) / 2.0)
 

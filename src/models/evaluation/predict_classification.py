@@ -8,12 +8,13 @@ import matplotlib.pyplot as plt
 
 from src.resources.config import get_stations_config
 from src.visualization.confusion_matrix import confusion_matrix_and_report
+from sklearn.metrics import accuracy_score, precision_score, recall_score
 
-dirname_test_df = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs/test_dirname_label_df_6.csv'
-model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-24/15:06:38'
-reports_path = '/home/miaroe/workspace/lymph-node-classification/reports/2023-11-24/15:06:38/'
+dirname_test_df = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs/test_dirname_label_df.csv'
+model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-21/10:51:52'
+reports_path = '/home/miaroe/workspace/lymph-node-classification/reports/2023-11-21/10:51:52/'
 model_name = 'best_model'
-stations_config_nr = 6
+stations_config_nr = 3
 
 # local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/EBUS_Levanger_full_videos/Patient_036/Sequence_001'
 local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/baseline/Levanger_and_StOlavs/test/full_video'
@@ -108,6 +109,7 @@ def predict_classification_per_station(dirname_test_df, model_path, model_name, 
             print('prediction_per_station:', prediction_per_station_arr)
             print('-----------------------------')
 
+
         # add the prediction to the station_predictions df
         station_predictions.append({'dirname': dirname, 'patient_id': patient_id, 'station': station,
                                                           'prediction_values_arr': prediction_per_station_arr,
@@ -127,6 +129,18 @@ def predict_classification_per_station(dirname_test_df, model_path, model_name, 
     predicted_labels = station_predictions_df['prediction_station']
     predicted_labels = [predicted_labels[i] for i in range(len(predicted_labels))]
 
+    # Calculate accuracy
+    accuracy = accuracy_score(true_labels, predicted_labels)
+    print(f'Accuracy: {accuracy:}')
+
+    # Calculate precision
+    precision = precision_score(true_labels, predicted_labels, average='weighted')
+    print(f'Precision: {precision:}')
+
+    # Calculate recall
+    recall = recall_score(true_labels, predicted_labels, average='weighted')
+    print(f'Recall: {recall:}')
+
     # use stations config to get the numbers of the labels
     for i in range(len(true_labels)):
         true_labels[i] = stations_config[true_labels[i]]
@@ -136,8 +150,8 @@ def predict_classification_per_station(dirname_test_df, model_path, model_name, 
     confusion_matrix_and_report(true_labels, predicted_labels, len(labels), stations_config, reports_path, 'avg_')
 
 
-    print('num_correct:', len(station_predictions_df[station_predictions_df['station'] == station_predictions_df['prediction_station']]))
-    print('num_total:', len(station_predictions_df))
+    #print('num_correct:', len(station_predictions_df[station_predictions_df['station'] == station_predictions_df['prediction_station']]))
+    #print('num_total:', len(station_predictions_df))
     print('percent_correct:', len(station_predictions_df[station_predictions_df['station'] == station_predictions_df['prediction_station']]) / len(station_predictions_df) * 100)
 
 predict_classification_per_station(dirname_test_df, model_path, model_name, labels=list(get_stations_config(stations_config_nr).keys()))

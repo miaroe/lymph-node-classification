@@ -38,6 +38,6 @@ def plot_learning_curve(model_path, reports_path):
 
     fig_path = os.path.join(reports_path, 'figures/')
     os.makedirs(fig_path, exist_ok=True)
-    plt.savefig(fig_path + 'learning_curve2.png', dpi=300, bbox_inches='tight')
+    plt.savefig(fig_path + 'learning_curve.png', dpi=300, bbox_inches='tight')
 
-plot_learning_curve('/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-22/10:38:04/', '/home/miaroe/workspace/lymph-node-classification/reports/2023-11-22/10:38:04/')
+#plot_learning_curve('/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-20/16:36:26/', '/home/miaroe/workspace/lymph-node-classification/reports/2023-11-20/16:36:26/')
