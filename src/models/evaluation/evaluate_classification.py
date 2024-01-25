@@ -2,6 +2,7 @@ import os
 from tensorflow.keras.metrics import Precision, Recall
 import tensorflow as tf
 import numpy as np
+import pandas as pd
 
 from src.resources.loss import get_loss
 from src.resources.ml_models import get_arch
@@ -14,7 +15,7 @@ from src.visualization.station_distribution import station_distribution_figure_a
 from src.visualization.compare_metrics import plot_compare_metrics
 from src.resources.train_config import get_config
 from src.resources.config import test_ds_path
-from src.utils.get_paths import get_station_paths, get_frame_paths
+from src.utils.get_paths import get_test_station_paths, get_frame_paths
 
 
 # -----------------------------  EVALUATING ----------------------------------
@@ -49,20 +50,21 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
 
     model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_partial()
 
-    if trainer.model_type == 'sequence':  # create finite datasets for sequence model
-        val_ds = trainer.val_ds.take(50)
-        steps = 50
-        test_sequence_model(trainer, model, trainer.seq_length, trainer.stride, train_config, conf_matrix, reports_path, station_distribution)
+    if trainer.model_type == 'sequence' or trainer.model_type == 'combined_sequence':  # create finite datasets for sequence model
+        steps = trainer.validation_steps * trainer.batch_size
+        val_ds = trainer.val_ds.take(steps)
+        test_sequence_model(trainer, model, trainer.seq_length, trainer.stride, train_config, conf_matrix, station_distribution, reports_path)
 
     elif trainer.model_type == 'baseline' or trainer.model_type == 'combined_baseline':
         val_ds = trainer.val_ds
         test_baseline_model(trainer, model, train_config, visualize_predictions, conf_matrix,
                             station_distribution, reports_path)
         score_test = model.evaluate(trainer.test_ds, return_dict=True, steps=steps)
-        print("Model metrics using test dataset: ")
-        print(f'{"Metric":<12}{"Value"}')
-        for metric, value in score_test.items():
-            print(f'{metric:<12}{value:<.4f}')
+        with open(os.path.join(reports_path, 'test_metrics.txt'), 'a') as f:
+            f.write(f'\n\nTest metrics for model: {model_path}\n')
+            f.write(f'{"Metric":<12}{"Value"}\n')
+            for metric, value in score_test.items():
+                f.write(f'{metric:<12}{value:<.4f}\n')
 
     else:
         raise ValueError(f'Invalid model type: {trainer.model_type}')
@@ -70,10 +72,11 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
 
     score_val = model.evaluate(val_ds, return_dict=True, steps=steps)
 
-    print("Model metrics using validation dataset: ")
-    print(f'{"Metric":<12}{"Value"}')
-    for metric, value in score_val.items():
-        print(f'{metric:<12}{value:<.4f}')
+    with open(os.path.join(reports_path, 'val_metrics.txt'), 'a') as f:
+        f.write(f'\n\nValidation metrics for model: {model_path}\n')
+        f.write(f'{"Metric":<12}{"Value"}\n')
+        for metric, value in score_val.items():
+            f.write(f'{metric:<12}{value:<.4f}\n')
 
     # save learning curve to src/reports/figures
     if learning_curve:
@@ -106,17 +109,19 @@ def test_baseline_model(trainer, model, train_config, visualize_predictions, con
         confusion_matrix_and_report(true_labels, predictions, trainer.num_stations, train_config.get('stations_config'),
                                     reports_path, 'frame_')
     if station_distribution:
-        station_distribution_figure_and_report(trainer.train_ds, trainer.val_ds, trainer.test_ds, train_config.get('num_stations'),
-                                               train_config.get('stations_config'), reports_path)
+        station_distribution_figure_and_report(trainer.train_ds, trainer.val_ds, train_config.get('num_stations'),
+                                               train_config.get('stations_config'), reports_path, trainer.test_ds)
 
 
 def test_sequence_model(trainer, model, seq_length, stride, train_config, conf_matrix, station_distribution, reports_path):
-    true_labels, predictions = get_test_pred_sequence(trainer, model, seq_length, stride)
+    true_labels, predictions = get_test_pred_sequence(trainer, model, seq_length, stride, reports_path)
     if conf_matrix:
         confusion_matrix_and_report(true_labels, predictions, trainer.num_stations, train_config.get('stations_config'),
                                     reports_path, 'sequence_')
-    if station_distribution: #TODO: add test_ds from get_test_pred_sequence, it is not in trainer
-        station_distribution_figure_and_report(trainer.train_ds.take(50), trainer.val_ds.take(50), trainer.test_ds, train_config.get('num_stations'),
+    if station_distribution:
+        station_distribution_figure_and_report(trainer.train_ds.take(trainer.steps_per_epoch),
+                                               trainer.val_ds.take(trainer.validation_steps),
+                                               train_config.get('num_stations'),
                                                train_config.get('stations_config'), reports_path)
 
 
@@ -149,52 +154,60 @@ def get_test_pred_baseline(model, test_ds, num_stations):
 
 
 # get true labels and predictions for sequence model from test dataset stored in test_ds_path
-def get_test_pred_sequence(trainer, model, seq_length, stride):
-    station_paths_list = get_station_paths(test_ds_path)
+def get_test_pred_sequence(trainer, model, seq_length, stride, reports_path):
+    station_paths_list = get_test_station_paths(test_ds_path)
+
     true_labels = []
     predictions = []
+    test_pred_df = [] #used to save predictions and true labels
 
-    for patient in station_paths_list:
-        print('patient: ', patient)
-        for station_path in patient:
-            frame_paths = get_frame_paths(station_path)
-            num_frames = len(frame_paths)
-            # creates a list of sequences of length=seq_length with stride=stride,
-            # if num_frames is not divisible by seq_length * stride the last sequence will be shorter
-            sequences = [frame_paths[i: i + seq_length * stride: stride] for i in
-                         range(0, num_frames, seq_length * stride)]
+    for station_path in station_paths_list:
+        frame_paths = get_frame_paths(station_path)
+        num_frames = len(frame_paths)
+        # creates a list of sequences of length=seq_length with stride=stride,
+        # if num_frames is not divisible by seq_length * stride the last sequence will be shorter
+        sequences = [frame_paths[i: i + seq_length * stride: stride] for i in
+                     range(0, num_frames, seq_length * stride)]
 
-            pred_sequences_dict = {}
+        pred_sequences_dict = {}
 
-            for sequence in sequences:
-                # load images from sequence, if sequence is shorter than seq_length, it is padded with zeros
-                sequence_images = trainer.pipeline.load_image_sequence(sequence)
+        for sequence in sequences:
+            # load images from sequence, if sequence is shorter than seq_length, it is padded with zeros
+            sequence_images = trainer.pipeline.load_image_sequence(sequence, augment=False)
 
-                # reshape sequence to (1, seq_length, img_height, img_width, channels)
-                sequence_shape = sequence_images.shape
-                sequence_5D = tf.reshape(sequence_images, (1, sequence_shape[0], sequence_shape[1], sequence_shape[2],
-                                                           sequence_shape[3]))
+            # reshape sequence to (1, seq_length, img_height, img_width, channels)
+            sequence_shape = sequence_images.shape
+            sequence_5D = tf.reshape(sequence_images, (1, sequence_shape[0], sequence_shape[1], sequence_shape[2],
+                                                       sequence_shape[3]))
 
-                # predict on sequence
-                pred_sequence = model.predict(sequence_5D)[0]
-                # dict that stores length of sequence and prediction
-                pred_sequences_dict[len(sequence)] = pred_sequence
+            # predict on sequence
+            pred_sequence = model.predict(sequence_5D)[0]
+            # dict that stores length of sequence and prediction
+            pred_sequences_dict[len(sequence)] = pred_sequence
 
-            # array that will store the mean prediction for each station
-            # x_bar = sum(x_i * n_i) / sum(n_i)
-            mean_pred = np.zeros(trainer.num_stations)
-            for station in range(trainer.num_stations):
-                station_pred = 0
-                num_station_frames = 0
-                for key, value in pred_sequences_dict.items():
-                    station_pred += value[station] * key
-                    num_station_frames += key
-                mean_pred[station] = station_pred / num_station_frames
-            print('mean_pred: ', mean_pred)
-            print('argmax: ', np.argmax(mean_pred))
-            predictions.append(np.argmax(mean_pred))
-            station_folder = station_path.split('/')[-1]
-            print('station_folder: ', station_folder)
-            print('true_label: ', trainer.stations_config[station_folder])
-            true_labels.append(trainer.stations_config[station_folder])
+        # array that will store the mean prediction for each station
+        # x_bar = sum(x_i * n_i) / sum(n_i)
+        mean_pred = np.zeros(trainer.num_stations)
+        for station in range(trainer.num_stations):
+            station_pred = 0
+            num_station_frames = 0
+            for key, value in pred_sequences_dict.items():
+                station_pred += value[station] * key
+                num_station_frames += key
+            mean_pred[station] = station_pred / num_station_frames
+
+        predictions.append(np.argmax(mean_pred))
+        station_folder = station_path.split('/')[-1]
+        true_labels.append(trainer.stations_config[station_folder])
+        labels = list(trainer.stations_config.keys())
+
+        test_pred_df.append({'station_path: ': station_path,
+                             'mean_pred: ': mean_pred,
+                             'pred_label: ': labels[np.argmax(mean_pred)],
+                             'true_label: ': station_folder})
+
+    test_pred_df = pd.DataFrame(test_pred_df)
+    os.makedirs(reports_path, exist_ok=True)
+    test_pred_df.to_csv(reports_path + 'test_pred_df.csv')
+
     return true_labels, predictions

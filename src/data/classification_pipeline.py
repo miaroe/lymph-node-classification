@@ -7,8 +7,8 @@ import random
 import matplotlib.pyplot as plt
 
 from src.resources.augmentation import GammaTransform, ContrastScale, Blur, BrightnessTransform, GaussianShadow, \
-    RandomAugmentation, Rotation, NonLinearMap
-from src.utils.get_paths import get_station_paths, get_frame_paths
+    RandomAugmentation, Rotation, NonLinearMap, RandomAugmentationSequence
+from src.utils.get_paths import get_training_station_paths, get_frame_paths
 
 log = logging.getLogger()
 
@@ -185,38 +185,20 @@ class SequenceClassificationPipeline(ClassificationPipeline):
         self.train_paths, self.val_paths = self.get_training_paths()
 
     def get_training_paths(self):
-        station_paths_list = get_station_paths(self.data_path)
-        train_paths, val_paths = self.split_data(station_paths_list)
-        return train_paths, val_paths
+        return get_training_station_paths(self.data_path)
 
-    def split_data(self, frames):
 
-        # Split data using train_test_split
-        total_samples = len(frames)
-        validation_samples = int(self.validation_split * total_samples)
-
-        indices = np.arange(total_samples)
-
-        train_ind, val_ind = train_test_split(indices, test_size=validation_samples, random_state=123)
-
-        # Index sequences and labels using the indices
-        train_frames = [frames[i] for i in train_ind]
-        val_frames = [frames[i] for i in val_ind]
-
-        return train_frames, val_frames
-
-    def load_image(self, image_path):
+    def load_image(self, image_path, augment):
         """Load and preprocess a single image from a file path"""
-        img = tf.keras.utils.load_img(image_path, color_mode='rgb', target_size=None)
+        img = tf.keras.utils.load_img(image_path, color_mode='rgb', target_size=self.image_shape)
         img = tf.cast(img, tf.float32)  # pixel values are in range [0, 255] to apply preprocessing layer in ml_models
-        img = img[100:1035, 530:1658]  # Cropping the image to the region of interest
         #img = (tf.cast(img, tf.float32) / 127.5) - 1  # specific for mobilenet, inception TODO: change for other models
-        #img = img / 255.0 # normalizing the image to be in range [0, 1] #TODO: change for other models
-        img = tf.image.resize(img, self.image_shape)  # resizing the image to the desired shape
+        if augment:
+            img = img / 255.0 # normalizing the image to be in range [0, 1] for augmentation
         return img
 
-    def load_image_sequence(self, frame_paths):
-        sequence = [self.load_image(frame_path) for frame_path in frame_paths]
+    def load_image_sequence(self, frame_paths, augment):
+        sequence = [self.load_image(frame_path, augment) for frame_path in frame_paths] # numpy list of tf tensors
         if len(sequence) != self.seq_length:
             # add zero padding to make the total equal seq_length
             zero_frame = np.zeros_like(sequence[-1], dtype=np.float32)
@@ -237,13 +219,12 @@ class SequenceClassificationPipeline(ClassificationPipeline):
             start_index = random.randint(0, num_frames - (self.seq_length * self.stride))
         end_index = start_index + (self.seq_length * self.stride)
         sequence_paths = frame_paths[start_index:end_index:self.stride]  # len(sequence_paths) = seq_length (or less)
-        sequence = self.load_image_sequence(sequence_paths)
+        sequence = self.load_image_sequence(sequence_paths, augment=self.augment)
         #sequence = tf.convert_to_tensor(sequence)  # convert sequence to tf tensor
         #print('sequence_tensor: ', sequence)
         return sequence
 
-    def get_label_from_path(self, path):
-        station_folder = path.split('/')[-1]
+    def get_label_one_hot(self, station_folder):
         label = self.stations_config[station_folder]
         label_one_hot = tf.keras.utils.to_categorical(label, num_classes=self.num_stations)
         label_one_hot = tf.cast(label_one_hot, tf.float32)
@@ -252,9 +233,25 @@ class SequenceClassificationPipeline(ClassificationPipeline):
     # https://www.tensorflow.org/api_docs/python/tf/data/Dataset#from_generator
     def gen(self, paths):
         while True:  # infinite generator
-            patient = random.choice(paths)  # choose a random patient
-            station = random.choice(patient)  # choose a random station
-            yield station, self.get_label_from_path(station)
+            #choose a random station from the list of stations
+            station = random.choice(list(self.stations_config.keys()))
+            # choose a random patient from the list of patients for that station
+            filtered_paths = [path for path in paths if path.endswith(station)]
+            patient = random.choice(filtered_paths)
+            yield patient, self.get_label_one_hot(station)
+
+    def data_augmentationSeq(self, x):
+        augmentation_layers = [GammaTransform(low=0.5, high=1.5), Blur(sigma_max=1.0), NonLinearMap(),
+                               Rotation(max_angle=15),
+                               GaussianShadow(sigma_x=(0.1, 0.5), sigma_y=(0.1, 0.9), strength=(0.5, 0.8))]
+        #augmentation_layers = [Blur(sigma_max=0.1)]
+        return RandomAugmentationSequence(augmentation_layers)(x)
+
+    @tf.function
+    def data_augmentation_map(self, x, y):
+        augmented_x = tf.py_function(func=self.data_augmentationSeq, inp=[x], Tout=tf.float32)
+        return augmented_x, y
+
 
     def loader_function(self):
         # create dataset from generator (added lambda to provide a callable function to .from_generator)
@@ -283,18 +280,15 @@ class SequenceClassificationPipeline(ClassificationPipeline):
             # add custom data augmentation here using GammaTransform class
             GammaTransform()
         ])
-        
         '''
 
         if self.augment:
-            augmentation_layers = [GammaTransform(), ContrastScale(), Blur(), BrightnessTransform(), NonLinearMap(),
-                                   GaussianShadow(sigma_x=(0.1, 0.5), sigma_y=(0.1, 0.9), strength=(0.5, 0.8))]
-            data_augmentation = RandomAugmentation(augmentation_layers)
-
             # apply data augmentation to training data
-            train_ds = train_ds.map(lambda x, y: (tf.py_function(func=data_augmentation,
-                                                                 inp=[x], Tout=tf.float32), y),
-                                    num_parallel_calls=tf.data.AUTOTUNE)
+            train_ds = train_ds.map(self.data_augmentation_map, num_parallel_calls=tf.data.AUTOTUNE)
+
+            # scale each image back to [0, 255]
+            train_ds = train_ds.map(lambda x, y: (x * 255.0, y), num_parallel_calls=tf.data.AUTOTUNE)
+            val_ds = val_ds.map(lambda x, y: (x * 255.0, y), num_parallel_calls=tf.data.AUTOTUNE)
 
         # batch and prefetch the datasets
         self.train_ds = train_ds.batch(self.batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)

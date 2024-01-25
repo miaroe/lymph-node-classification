@@ -1,6 +1,8 @@
 from datetime import datetime
 import os
 
+from src.utils.get_paths import count_number_of_training_samples
+
 
 # -----------------------------  STATIONS CONFIG ----------------------------------
 
@@ -63,56 +65,32 @@ def get_stations_config(station_config_nr):
             '11L': 4,
             '11R': 5
         }
+    elif station_config_nr == 7:  # multiclass classification with station 0
+        return {
+            '0': 0,
+            '4L': 1,
+            '4R': 2,
+            '7L': 3,
+            '7R': 4,
+            '10L': 5,
+            '10R': 6,
+            '11L': 7,
+            '11R': 8
+        }
 
 
 def get_num_stations(station_config_nr):
     return len(get_stations_config(station_config_nr).keys())
 
+# -----------------------------  MODEL TYPE ----------------------------------
+model_type = 'combined_sequence'  # baseline, combined_baseline, sequence or combined_sequence
 
-# -----------------------------  TRAINING PARAMETERS ----------------------------------
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "2"  # whether to use GPU for training (-1 == no GPU, else GPU)
-os.environ['CUDA_DEVICE_ORDER'] = "PCI_BUS_ID"
-
-perform_training = True
-
-model_type = 'combined_baseline'  # baseline, combined_baseline or sequence
-station_config_nr = 3  # class configuration (gives mapping and mapped labels)
-stations_config = get_stations_config(station_config_nr)
-num_stations = get_num_stations(station_config_nr)
-filter_data = False # only includes sequences labeled as 'good' and 'ok'
-
-img_size = 256
-instance_size = (img_size, img_size, 3)
-augment = True
-epochs = 200
-batch_size = 32
-patience = 20
-model_arch = "cvc_net"  # which architecture/CNN to use - see models.py for info about archs
-loss = 'categoricalCrossEntropy' # binaryCrossEntropy for binary, categoricalCrossEntropy / focalCrossEntropy for multiclass
-learning_rate = 0.0001  # relevant for the optimizer, Adam used by default (with default lr=1e-3), I normally use 1e-4 when finetuning
-stratified_cv = False
-test_split = 0.1
-validation_split = 0.2
-
-# for sequence model
-steps_per_epoch = 200
-validation_steps = 50
-stride = 4
-seq_length = 10  # number of frames in each sequence
+# -----------------------------  PATHS ----------------------------------
 
 date = datetime.today().strftime('%Y-%m-%d')
 time = datetime.today().strftime('%H:%M:%S')
 
-# -----------------------------  EVALUATION PARAMETERS ----------------------------------
-visualize_predictions = True
-learning_curve = True
-conf_matrix = True
-model_layout = True
-station_distribution = True
-compare_metrics = True
-
-# -----------------------------  PATHS ----------------------------------
 if model_type == 'baseline':
     data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger'
     test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger/test'
@@ -120,8 +98,17 @@ elif model_type == 'combined_baseline':
     data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs'
     test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs/test' #the same data as for baseline as test_patients are chosen manually for now
 elif model_type == 'sequence':
-    data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Levanger_sequence'
-    test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_test/sequence'
+    data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger'
+    test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger/test'
+    full_video_path = ['/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/FullVideos/EBUS_Levanger_full_videos']
+elif model_type == 'combined_sequence':
+    data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger_and_StOlavs'
+    test_ds_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger_and_StOlavs/test'
+    full_video_path = ['/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/FullVideos/EBUS_Levanger_full_videos',
+                       '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/FullVideos/EBUS_Levanger_with_consent_full_videos',
+                       '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/FullVideos/EBUS_StOlavs_full_videos']
+else:
+    raise ValueError('Model type not recognized')
 
 db_path = '/mnt/EncryptedData1/LungNavigation/EBUS/'
 model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/' + date + '/' + time + '/'
@@ -133,3 +120,45 @@ local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/EBUS_Levanger_
 local_model_path = '/Users/miarodde/Documents/sintef/ebus-ai/lymph-node-classification/output/models/'
 local_model_name = 'best_model'
 local_logfile_path = '/Users/miarodde/Documents/sintef/ebus-ai/lymph-node-classification/output/logs'
+
+
+
+# -----------------------------  TRAINING PARAMETERS ----------------------------------
+
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"  # whether to use GPU for training (-1 == no GPU, else GPU)
+os.environ['CUDA_DEVICE_ORDER'] = "PCI_BUS_ID"
+
+perform_training = True
+
+station_config_nr = 7  # class configuration (gives mapping and mapped labels)
+stations_config = get_stations_config(station_config_nr)
+num_stations = get_num_stations(station_config_nr)
+num_train, num_val = count_number_of_training_samples(data_path)
+filter_data = False # only includes sequences labeled as 'good' and 'ok'
+
+img_size = 224
+instance_size = (img_size, img_size, 3)
+augment = True
+epochs = 100
+batch_size = 4
+patience = 20
+model_arch = "mobileNetV3Small-lstm"  # which architecture/CNN to use - see models.py for info about archs
+loss = 'categoricalCrossEntropy' # binaryCrossEntropy for binary, categoricalCrossEntropy / focalCrossEntropy for multiclass
+learning_rate = 0.0001  # relevant for the optimizer, Adam used by default (with default lr=1e-3), I normally use 1e-4 when finetuning
+stratified_cv = False
+test_split = 0.1
+validation_split = 0.2
+
+# for sequence model
+steps_per_epoch = num_train // batch_size
+validation_steps = num_val // batch_size
+stride = 4
+seq_length = 10  # number of frames in each sequence
+
+# -----------------------------  EVALUATION PARAMETERS ----------------------------------
+visualize_predictions = True
+learning_curve = True
+conf_matrix = True
+model_layout = False
+station_distribution = True
+compare_metrics = True

@@ -27,17 +27,19 @@ def train_model(data_path, test_ds_path, log_path, image_shape, validation_split
                 batch_size, stations_config, num_stations, loss, model_type, model_arch,
                 instance_size, learning_rate, model_path, patience,
                 epochs, steps_per_epoch, validation_steps, stride, augment, stratified_cv, seq_length):
+
     if model_type == "baseline" or model_type == "combined_baseline":
         trainer = BaselineTrainer(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
                                   batch_size, stations_config, num_stations, loss, model_type, model_arch,
                                   instance_size, learning_rate, model_path, patience, epochs, augment, stratified_cv)
-    elif model_type == "sequence":
+    elif model_type == "sequence" or model_type == "combined_sequence":
         trainer = SequenceTrainer(data_path, test_ds_path, log_path, image_shape, validation_split, test_split,
                                   batch_size, stations_config, num_stations, loss, model_type, model_arch,
                                   instance_size, learning_rate, model_path, patience, epochs, steps_per_epoch,
                                   validation_steps, stride, augment, seq_length)
     else:
         raise ValueError("Model type not supported")
+
     # Perform training
     trainer.train()
 
@@ -305,15 +307,27 @@ class SequenceTrainer:
 
         self.train_ds, self.val_ds = self.pipeline.loader_function()
 
-        # MULTICLASS : images: shape=(32, 10, 256, 256, 3), labels: shape=(32, 9) for batch_size=32
+        plt.style.use('dark_background')
+        # print the value range of the pixels
+        for images, labels in self.train_ds.take(1):
+            print('images shape: ', images.shape)  # (batch_size, seq_length, 256, 256, 3)
+            print(tf.reduce_min(images), tf.reduce_max(images))
 
+            for i in range(self.batch_size):
+                plt.imshow(images[i][0] / 255)
+                plt.title(f'Label: {labels[i]} (batch {i})')
+                plt.axis('off')
+                plt.show()
+
+
+        '''
         # plotting the seq_length first frames of the first sequence in the first four batches
         for i, (images, labels) in enumerate(self.train_ds.take(4)):
-            # print('images shape: ', images.shape)  # (4, seq_length, 256, 256, 3)
-            # print('labels shape: ', labels.shape)  # (4, 8)
+            print('images shape: ', images.shape)  # (4, seq_length, 256, 256, 3)
+            print('labels shape: ', labels.shape)  # (4, 8)
             rows = self.seq_length // 2 if self.seq_length % 2 == 0 else self.seq_length // 2 + 1
 
-            plt.style.use('ggplot')
+            #plt.style.use('ggplot')
             plt.figure(figsize=(10, 10))
             for j in range(self.seq_length):
                 plt.subplot(rows, 3, j + 1)
@@ -327,6 +341,8 @@ class SequenceTrainer:
             plt.subplots_adjust(top=0.85)  # Adjust top spacing for suptitle
             plt.suptitle(f"Batch {i}")
             plt.show()
+            
+         '''
 
     # -----------------------------  BUILDING AND SAVING MODEL ----------------------------------
 
@@ -386,16 +402,18 @@ class SequenceTrainer:
         self.build_model()
 
         print("-- TRAINING --")
+        print("Number of training sequences: ", self.steps_per_epoch)
+        print("Number of validation sequences: ", self.validation_steps)
 
         save_best, early_stop, tb_logger, class_metrics = self.save_model()
 
         self.model.fit(self.train_ds,
                        epochs=self.epochs,
                        validation_data=self.val_ds,
-                       steps_per_epoch=self.steps_per_epoch,
+                       steps_per_epoch=self.steps_per_epoch, # number of sequences / batch_size
                        validation_steps=self.validation_steps,
-                       callbacks=[save_best, early_stop, self.experiment_logger, tb_logger, class_metrics],
-                       class_weight=get_class_weight(self.train_ds.take(self.steps_per_epoch), self.num_stations))
+                       callbacks=[save_best, early_stop, self.experiment_logger, tb_logger, class_metrics])
+                       #class_weight=get_class_weight(self.train_ds.take(self.steps_per_epoch), self.num_stations))
 
         best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
         best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))

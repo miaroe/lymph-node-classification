@@ -2,7 +2,7 @@ import numpy as np
 from tensorflow.keras import layers
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage import rotate
-
+import tensorflow as tf
 
 class RandomAugmentation(layers.Layer):
     def __init__(self, augmentation_layers, probability=0.5, **kwargs):
@@ -17,6 +17,23 @@ class RandomAugmentation(layers.Layer):
             if apply_augmentation:
                 augmentation_layer.randomize()
                 data = augmentation_layer(data)
+        return data
+
+class RandomAugmentationSequence(layers.Layer):
+    def __init__(self, augmentation_layers, probability=0.5, **kwargs):
+        super().__init__(**kwargs)
+        self.augmentation_layers = augmentation_layers
+        self.probability = probability
+
+    def call(self, data, **kwargs):
+        for augmentation_layer in self.augmentation_layers:
+            apply_augmentation = np.random.random() < self.probability
+            #apply_augmentation = True
+            if apply_augmentation:
+                augmentation_layer.randomize()
+                # Use tf.map_fn to apply augmentation to each element of the data tensor
+                data = tf.map_fn(lambda x: augmentation_layer(x), data, dtype=tf.float32)
+
         return data
 
 
@@ -40,7 +57,7 @@ class ContrastScale(layers.Layer):
         super().__init__(**kwargs)
         self.min_scale = min_scale
         self.max_scale = max_scale
-        self._random_scale = 0.0
+        self._random_scale = max_scale
 
     def randomize(self):
         self._random_scale = np.random.uniform(self.min_scale, self.max_scale)
@@ -55,7 +72,7 @@ class Blur(layers.Layer):
         super().__init__(**kwargs)
         self.sigma_max = sigma_max
         self.sigma_min = sigma_min
-        self._random_sigma = 0.0
+        self._random_sigma = sigma_max
 
     def randomize(self):
         self._random_sigma = np.random.uniform(self.sigma_min, self.sigma_max)
@@ -69,7 +86,7 @@ class BrightnessTransform(layers.Layer):
     def __init__(self, max_scale=0.2, **kwargs):
         super().__init__(**kwargs)
         self.max_scale = max_scale
-        self._random_scale = 0.0
+        self._random_scale = max_scale
 
     def randomize(self):
         self._random_scale = np.random.uniform(-self.max_scale, self.max_scale)
@@ -102,10 +119,10 @@ class GaussianShadow(layers.Layer):
         self.strength = strength
         self.location = location
 
-        self._random_sigma_x = 0.0
-        self._random_sigma_y = 0.0
-        self._random_strength = 0.0
-        self._random_location = 0.0
+        self._random_sigma_x = 0.5
+        self._random_sigma_y = 0.9
+        self._random_strength =  0.8
+        self._random_location =  np.random.uniform(-1.0, 1.0, 2).astype(np.float32)
 
     def randomize(self):
         self._random_sigma_x = np.random.uniform(self.sigma_x[0], self.sigma_x[1], 1).astype(np.float32)
@@ -150,7 +167,7 @@ class Rotation(layers.Layer):
     def __init__(self, max_angle=15, flow_indices=None, segmentation_indices=None, **kwargs):
         super().__init__(**kwargs)
         self.max_angle = max_angle
-        self._random_angle = 0
+        self._random_angle = 15
         self.flow_indices = flow_indices
         self.segmentation_indices = segmentation_indices
 
