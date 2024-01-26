@@ -15,10 +15,9 @@ from contextlib import redirect_stdout
 from src.resources.loss import get_loss
 from src.resources.train_config import set_train_config
 from src.data.classification_pipeline import BaselineClassificationPipeline, SequenceClassificationPipeline
-from src.resources.ml_models import get_arch
+from src.resources.architectures.ml_models import get_arch
 from src.utils.get_class_weight import get_class_weight
 from src.utils.metric_callback import ClassMetricsCallback
-from src.utils.timing_callback import TimingCallback
 
 enable_gpu_growth()
 logger = logging.getLogger()

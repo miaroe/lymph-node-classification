@@ -10,6 +10,7 @@ from tensorflow.keras.layers import Input, Dense, Conv2D, MaxPooling2D, Dropout,
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import PReLU
 from keras import regularizers
+from src.resources.architectures.timingnet import TimingNet
 
 
 # see here for already built-in pretrained architectures:
@@ -314,6 +315,16 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
 
         # Create the combined model
         model = Model(inputs=sequence_input, outputs=output)
+
+    elif model_arch == 'timingnet':
+        print('input shape: ', (None, *instance_size))
+
+        model = TimingNet(input_shape=(None, *instance_size), num_stations=num_stations)
+
+        output = Dense(num_stations, activation='softmax')(model.output)  # (B, num_classes)
+        model = Model(inputs=model.input, outputs=output)
+
+
 
 
     else:

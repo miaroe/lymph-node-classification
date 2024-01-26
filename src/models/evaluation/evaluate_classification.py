@@ -5,8 +5,7 @@ import numpy as np
 import pandas as pd
 
 from src.resources.loss import get_loss
-from src.resources.ml_models import get_arch
-from src.utils.get_current_dir import get_latest_date_time
+from src.resources.architectures.ml_models import get_arch
 from src.visualization.learning_curve import plot_learning_curve
 from src.visualization.prediction_model import plot_predictions
 from src.visualization.visual_model import visual_model
@@ -119,8 +118,8 @@ def test_sequence_model(trainer, model, seq_length, stride, train_config, conf_m
         confusion_matrix_and_report(true_labels, predictions, trainer.num_stations, train_config.get('stations_config'),
                                     reports_path, 'sequence_')
     if station_distribution:
-        station_distribution_figure_and_report(trainer.train_ds.take(trainer.steps_per_epoch),
-                                               trainer.val_ds.take(trainer.validation_steps),
+        station_distribution_figure_and_report(trainer.train_ds.take(trainer.steps_per_epoch * trainer.batch_size),
+                                               trainer.val_ds.take(trainer.validation_steps * trainer.batch_size),
                                                train_config.get('num_stations'),
                                                train_config.get('stations_config'), reports_path)
 
