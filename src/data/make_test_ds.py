@@ -4,6 +4,7 @@ import shutil
 from src.data.make_new_datastructure import get_dirname_label_map, copy_directory_baseline
 from src.resources.config import *
 
+# TODO: delete this file, not used
 def count_files_in_subdirectories(directory):
     total_files = 0
 

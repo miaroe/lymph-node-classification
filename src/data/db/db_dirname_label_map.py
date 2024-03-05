@@ -3,6 +3,7 @@ import pandas as pd
 
 from src.resources.config import *
 
+#TODO: remove this file, not used
 def get_dirname_label_map_db(model_type, station_config_nr):
     """
     Create a dictionary mapping dirname to label for the given model_type and station_config_nr
@@ -14,7 +15,7 @@ def get_dirname_label_map_db(model_type, station_config_nr):
     db_name = os.path.join(db_path, "db_modified.sqlite3")
     if model_type == 'baseline':
         table_name = 'imagesequence_with_quality'
-    elif model_type == 'combined_baseline' or model_type == 'combined_sequence':
+    elif model_type == 'combined_baseline':
         table_name = 'imagesequence_with_quality_combined'
     else:
         raise Exception("Invalid model_type")
