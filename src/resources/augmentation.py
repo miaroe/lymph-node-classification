@@ -13,8 +13,9 @@ class RandomAugmentation(layers.Layer):
     def call(self, data, **kwargs):
         for augmentation_layer in self.augmentation_layers:
             apply_augmentation = np.random.random() < self.probability
-            #print('apply_augmentation: ', apply_augmentation)
+            #apply_augmentation = True
             if apply_augmentation:
+                #print('apply augmentation: ', augmentation_layer)
                 augmentation_layer.randomize()
                 data = augmentation_layer(data)
         return data
@@ -30,6 +31,7 @@ class RandomAugmentationSequence(layers.Layer):
             apply_augmentation = np.random.random() < self.probability
             #apply_augmentation = True
             if apply_augmentation:
+                #print('apply augmentation: ', augmentation_layer)
                 augmentation_layer.randomize()
                 # Use tf.map_fn to apply augmentation to each element of the data tensor
                 data = tf.map_fn(lambda x: augmentation_layer(x), data, dtype=tf.float32)
@@ -42,7 +44,7 @@ class GammaTransform(layers.Layer):
         super().__init__(**kwargs)
         self.low = low
         self.high = high
-        self._random_gamma = 1.0
+        self._random_gamma = high
 
     def randomize(self):
         self._random_gamma = np.random.uniform(self.low, self.high)
@@ -167,7 +169,7 @@ class Rotation(layers.Layer):
     def __init__(self, max_angle=15, flow_indices=None, segmentation_indices=None, **kwargs):
         super().__init__(**kwargs)
         self.max_angle = max_angle
-        self._random_angle = 15
+        self._random_angle = max_angle
         self.flow_indices = flow_indices
         self.segmentation_indices = segmentation_indices
 
