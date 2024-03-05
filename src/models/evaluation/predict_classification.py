@@ -9,11 +9,14 @@ import matplotlib.pyplot as plt
 from src.resources.config import get_stations_config
 from src.visualization.confusion_matrix import confusion_matrix_and_report
 from sklearn.metrics import accuracy_score, precision_score, recall_score
+from src.resources.train_config import get_config
+from src.utils.get_paths import get_frame_paths
 
-dirname_test_df = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs/test_dirname_label_df.csv'
-model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-21/10:51:52'
-reports_path = '/home/miaroe/workspace/lymph-node-classification/reports/2023-11-21/10:51:52/'
+dirname_test_df = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger_and_StOlavs/test_dirname_label_df.csv'
+model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2024-03-03/22:33:14'
+reports_path = '/home/miaroe/workspace/lymph-node-classification/reports/2024-03-03/22:33:14/'
 model_name = 'best_model'
+test_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger_and_StOlavs/test'
 stations_config_nr = 3
 
 # local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/EBUS_Levanger_full_videos/Patient_036/Sequence_001'
@@ -154,7 +157,7 @@ def predict_classification_per_station(dirname_test_df, model_path, model_name, 
     #print('num_total:', len(station_predictions_df))
     print('percent_correct:', len(station_predictions_df[station_predictions_df['station'] == station_predictions_df['prediction_station']]) / len(station_predictions_df) * 100)
 
-predict_classification_per_station(dirname_test_df, model_path, model_name, labels=list(get_stations_config(stations_config_nr).keys()))
+#predict_classification_per_station(dirname_test_df, model_path, model_name, labels=list(get_stations_config(stations_config_nr).keys()))
 
 def compare_predictions_to_labels(model_path):
     station_predictions_df = pd.read_csv(os.path.join(model_path, 'station_predictions.csv'), sep=',')
@@ -177,6 +180,53 @@ def compare_predictions_to_labels(model_path):
     print('accuracy:', (1 - num_incorrect / num_total) * 100, '%')
 
 #compare_predictions_to_labels(model_path)
+
+
+# ------------------ Sequence ------------------#
+
+def preprocess_frames(image_path):
+    frame = tf.keras.utils.load_img(image_path, color_mode='rgb', target_size=(224, 224))
+    frame = tf.keras.utils.img_to_array(frame)
+    frame = tf.cast(frame, tf.float32)
+    return frame
+
+def load_image_sequence(frame_paths, seq_length):
+    sequence = [preprocess_frames(frame_path) for frame_path in frame_paths]
+    if len(sequence) != seq_length:
+        # add zero padding to make the total equal seq_length
+        zero_frame = np.zeros_like(sequence[-1], dtype=np.float32)
+        num_repeats = seq_length - len(frame_paths)
+        sequence = sequence + ([zero_frame] * num_repeats)
+    sequence = tf.stack(sequence)
+    return sequence
+
+def get_predictions(sequence, model):
+    sequence = np.array(sequence)  # Convert list to np.array
+    sequence = np.expand_dims(sequence, axis=0)  # Model expects batch dimension
+    predictions = model.predict(sequence)
+    return predictions[0]
+
+def predict_sequence(model_path, model_name, test_path, seq_length):
+    model = tf.keras.models.load_model(os.path.join(model_path, model_name))
+    sequence_predictions = []
+    true_labels = []
+    for patient in os.listdir(test_path):
+        patient_path = os.path.join(test_path, patient)
+        for station in os.listdir(patient_path):
+            station_path = os.path.join(patient_path, station)
+            frame_paths = get_frame_paths(station_path, 'sequence')
+            num_frames = len(frame_paths)
+            sequences = [frame_paths[i: i + seq_length] for i in range(0, num_frames, seq_length)]
+            for sequence in sequences:
+                loaded_sequence = load_image_sequence(sequence, seq_length)
+                prediction = get_predictions(loaded_sequence, model).tolist()
+                sequence_predictions.append(np.argmax(prediction))
+                true_labels.append(get_stations_config(stations_config_nr)[station])
+
+    confusion_matrix_and_report(true_labels, sequence_predictions, 8, get_stations_config(stations_config_nr), reports_path, 'test_')
+    return sequence_predictions, true_labels
+
+print(predict_sequence(model_path, model_name, test_path, seq_length=10))
 
 
 
@@ -338,3 +388,5 @@ def create_full_video_from_baseline_test(baseline_path):
     df.to_csv(os.path.join(full_video_path, 'labels.csv'), index=False)
 
 #create_full_video_from_baseline_test('/Users/miarodde/Documents/sintef/ebus-ai/baseline/Levanger_and_StOlavs/test')
+
+#get_average_pred_value('/home/miaroe/workspace/lymph-node-classification/reports/2024-02-12/10:00:01/test_pred_df.csv')

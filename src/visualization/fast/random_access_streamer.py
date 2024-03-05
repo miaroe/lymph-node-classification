@@ -9,7 +9,7 @@ import numpy as np
 from time import sleep
 # from src.resources.config import *
 
-full_video_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Levanger_full_videos/Patient_008/Sequence_001'
+full_video_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/FullVideos/EBUS_Levanger_full_videos/Patient_008/Sequence_001'
 
 class MyRandomAccessStreamer(fast.PythonRandomAccessStreamer):
     """

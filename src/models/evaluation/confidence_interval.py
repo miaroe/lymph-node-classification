@@ -2,12 +2,6 @@
 
 import scipy.stats
 import numpy as np
-import os
-import tensorflow as tf
-from tensorflow.keras.metrics import Precision, Recall
-from src.resources.config import get_stations_config
-from src.resources.loss import get_loss
-from src.resources.ml_models import get_arch
 
 model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-25/17:12:56/'
 num_test_images = 2158

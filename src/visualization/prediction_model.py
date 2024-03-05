@@ -13,7 +13,7 @@ def plot_predictions(model, test_ds, model_type, station_names, reports_path):
         predictions = model.predict(images)
         for i in range(6):
             ax = plt.subplot(2, 3, i + 1)
-            if model_type == 'baseline' or model_type == 'combined_baseline':
+            if model_type == 'baseline':
                 #image = ((images[i] + 1) / 2) * 255# denormalize image
                 image = images[i] * 255
             else:  # model_type == 'sequence' and has an extra dimension
