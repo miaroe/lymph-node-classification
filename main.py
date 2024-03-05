@@ -1,19 +1,25 @@
-from tensorflow.python.framework.random_seed import set_seed
+import numpy as np
+import tensorflow as tf
 
+from src.models.segmentation_masks.create_masks import create_seg_masks
 from src.resources.config import *
 from src.models.training.train_classification import train_model
 from src.models.evaluation.evaluate_classification import evaluate_model
 
-
-
-
 def main():
     """ The function running the entire pipeline of the project """
-    # To enable determinism between experiments
-    #set_seed(42)
+    # Set seed for reproducibility
+    np.random.seed(42)
+    tf.random.set_seed(42)
+
+    if model_type == 'sequence_with_segmentation' and perform_segmentation:
+        create_seg_masks(old_data_path=old_data_path,
+                         data_path=data_path,
+                         seg_model_path=seg_model_path
+                         )
+
 
     trainer = train_model(data_path=data_path,
-                          test_ds_path=test_ds_path,
                           log_path=log_path,
                           image_shape=(img_size, img_size),
                           validation_split=validation_split,
@@ -31,10 +37,13 @@ def main():
                           epochs=epochs,
                           steps_per_epoch=steps_per_epoch,
                           validation_steps=validation_steps,
-                          stride=stride,
+                          set_stride=set_stride,
                           augment=augment,
                           stratified_cv=stratified_cv,
-                          seq_length=seq_length)
+                          seq_length=seq_length,
+                          full_video=full_video,
+                          use_quality_weights=use_quality_weights,
+                          use_gen=use_gen)
 
     evaluate_model(trainer=trainer,
                    reports_path=reports_path,
