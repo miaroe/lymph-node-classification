@@ -11,6 +11,7 @@ from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import PReLU
 from keras import regularizers
 from src.resources.architectures.timingnet import TimingNet
+from src.resources.architectures.ResNet18 import ResNet18
 
 
 # see here for already built-in pretrained architectures:
@@ -133,10 +134,10 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
 
         base_model = tf.keras.applications.MobileNetV3Small(input_shape=instance_size, include_top=False,
                                                             weights='imagenet', include_preprocessing=True,
-                                                            minimalistic=True, dropout_rate=0.4)
+                                                            minimalistic=True, dropout_rate=0.3)
 
-        for layer in base_model.layers[:-6]:
-            layer.trainable = False
+        #for layer in base_model.layers[:-6]:
+        #    layer.trainable = False
 
         #base_model.trainable = False
 
@@ -147,7 +148,7 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
 
         x = base_model.output
         x = tf.keras.layers.GlobalMaxPooling2D()(x)
-        x = tf.keras.layers.Dropout(0.3)(x)
+        x = tf.keras.layers.Dropout(0.5)(x)
         outputs = prediction_layer(x)
         model = Model(inputs=base_model.input, outputs=outputs)
 
@@ -321,15 +322,53 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
 
         model = TimingNet(input_shape=(None, *instance_size), num_stations=num_stations)
 
-        output = Dense(num_stations, activation='softmax')(model.output)  # (B, num_classes)
-        model = Model(inputs=model.input, outputs=output)
+    elif model_arch == 'resnet18':
+        model = ResNet18(input_shape=(None, *instance_size), num_stations=num_stations)
 
+    elif model_arch == 'mutli-input_mobileNetV3Small-lstm':
+        # Define the inputs
+        image_input = Input(shape=(None, *instance_size), name='image_input')  # Sequence of grayscale images
+        mask_input = Input(shape=(None, *instance_size), name='mask_input')  # Sequence of segmentation masks
 
+        # Image processing pathway
+        # Here, we're using a TimeDistributed wrapper to apply a model to each time step independently
+        image_model = tf.keras.applications.MobileNetV3Small(input_shape=instance_size, include_top=False, weights='imagenet',
+                                                            include_preprocessing=True, minimalistic=True, dropout_rate=0.3)
+
+        image_features = TimeDistributed(image_model)(image_input)
+        image_features = TimeDistributed(GlobalAveragePooling2D())(image_features)
+
+        # Mask processing pathway
+        # Simple CNN for extracting features from masks, adjust as necessary
+        mask_features = TimeDistributed(Conv2D(16, (3, 3), activation='relu', padding='same'))(mask_input)
+        mask_features = TimeDistributed(Conv2D(32, (3, 3), activation='relu', padding='same'))(mask_features)
+        mask_features = TimeDistributed(GlobalAveragePooling2D())(mask_features)
+
+        # Combine the features
+        combined_features = Concatenate()([image_features, mask_features])
+
+        # Create an LSTM layer
+        lstm_1 = LSTM(32, return_sequences=True, stateful=stateful)(combined_features)  # (B, T, lstm_output_dim)
+
+        lstm_2 = LSTM(32, return_sequences=False, stateful=stateful)(lstm_1)  # (B, lstm_output_dim)
+
+        # Create a dense layer
+        dense = Dense(32, activation='relu')(lstm_2)  # (B, dense_output_dim)
+
+        # Create a dropout layer
+        dropout = Dropout(0.5)(dense)  # (B, dense_output_dim)
+
+        # Create the output layer for classification
+        output = Dense(num_stations, activation='softmax')(dropout)  # (B, num_classes)
+
+        # Create the model
+        model = Model(inputs=[image_input, mask_input], outputs=output)
 
 
     else:
-        print("please choose supported models: {basic, inception, resnet, inception_multi-task, mobilenet,"
-              "cvc_net, vgg16, cnn-lstm}")
+        print("please choose supported models: {basic, inception, resnet, inception_multi-task, mobilenetV2,"
+              "mobileNetV3Small, cvc_net, vgg16, vgg16_v2, efficientnet, xception, inception_resnet_v2,"
+              "mobileNetV3Small-lstm, timingnet, resnet18}")
         exit()
 
     return model
