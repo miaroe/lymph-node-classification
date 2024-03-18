@@ -26,7 +26,6 @@ def get_dirname_label_map_full_video():
                     if file.endswith('.csv'):
                         file_path = os.path.join(sequence_path, file)
                         df = pd.read_csv(file_path, sep=';')
-                        #zero_start_index, zero_end_index = select_zero_sequence(df)
                         label_start_indices, label_end_indices, label, seq_number = get_label_sequences(df)
                         for i in range(len(label_start_indices)):
                             if label[i] not in list(stations_config.keys()):
@@ -38,22 +37,14 @@ def get_dirname_label_map_full_video():
                                                      'end_index': label_end_indices[i],
                                                      'seq_number': seq_number[i]})
 
-                        #dirname_label_df.append({'dirname': sequence_path,
-                        #                         'patient_id': str(patient_id),
-                        #                         'label': '0',
-                        #                         'start_index': zero_start_index,
-                        #                         'end_index': zero_end_index})
-
             patient_id += 1
 
 
     dirname_label_df = pd.DataFrame(dirname_label_df)
     return dirname_label_df
 
-#not used, TODO: delete
+
 def select_zero_sequence(df):
-    random_zero_sequence_start_index = None
-    random_zero_sequence_end_index = None
     # find the start and end indexes of all zero sequences in the dataframe
     zero_sequence_start_indexes = df.index[(df['label'] == '0') & (df['label'].shift(1) != '0')].tolist()
     zero_sequence_end_indexes = df.index[(df['label'] == '0') & (df['label'].shift(-1) != '0')].tolist()
@@ -62,9 +53,19 @@ def select_zero_sequence(df):
     zero_sequence_start_indexes = zero_sequence_start_indexes[1:-1]
     zero_sequence_end_indexes = zero_sequence_end_indexes[1:-1]
 
+    # exclude the sequence between 4R and 10R
+    for i in range(len(zero_sequence_start_indexes) - 1):
+        # check if the label before the start index is 4R and the label after the end index is 10R and exclude the sequence
+        if df['label'][zero_sequence_start_indexes[i] - 1] == '4R' and df['label'][zero_sequence_end_indexes[i] + 1] == '10R':
+            zero_sequence_start_indexes.pop(i)
+            zero_sequence_end_indexes.pop(i)
+
     # pick a random zero sequence from the dataframe and return the start and end indexes
     random_zero_sequence_start_index = random.choice(zero_sequence_start_indexes)
     random_zero_sequence_end_index = zero_sequence_end_indexes[zero_sequence_start_indexes.index(random_zero_sequence_start_index)]
+
+    # cut the sequence in half and return the first half as the zero sequence
+    random_zero_sequence_end_index = random_zero_sequence_start_index + (random_zero_sequence_end_index - random_zero_sequence_start_index) // 2
 
     return random_zero_sequence_start_index, random_zero_sequence_end_index
 
@@ -87,6 +88,12 @@ def get_label_sequences(df):
     # check if some labels have multiple sequences and return a list of seq_number
     seq_number = get_seq_number(sequence_label_list)
 
+    # add 0 sequence
+    zero_start_index, zero_end_index = select_zero_sequence(df)
+    sequence_start_indexes.append(zero_start_index)
+    sequence_end_indexes.append(zero_end_index)
+    sequence_label_list.append('0')
+    seq_number.append(1)
     return sequence_start_indexes, sequence_end_indexes, sequence_label_list, seq_number
 
 #------------------ New data structure helper functions ------------------#
@@ -103,6 +110,8 @@ def get_subject_ids(dirname_label_df, test_patient_ids=None):
     """
 
     unique_patient_ids = dirname_label_df['patient_id'].unique()
+    print('unique_patient_ids: ', unique_patient_ids)
+    print('test_patient_ids: ', test_patient_ids)
     np.random.shuffle(unique_patient_ids)
     num_val_patients = int(len(unique_patient_ids) * validation_split)
     print('num_val_patients: ', num_val_patients)
@@ -262,11 +271,6 @@ def create_new_datastructure_from_df(struct_type, df, dir, dirname_quality_map, 
 
 
 
-
-
-
-
-
 # ------------------- Crop images -------------------#
 
 def crop_image(filename, folder_path):
@@ -316,6 +320,7 @@ def create_EBUS_data(struct_type):
 
     #'Patient_005', 'Patient_016', 'Patient_024', 'Patient_036'
     #test_subject_ids = [715, 724, 735, 743]
+    test_subject_ids = ['8', '34', '14', '48', '42']
 
     # remove old data structure
     if os.path.exists(train_dir):
@@ -330,7 +335,7 @@ def create_EBUS_data(struct_type):
     dirname_label_df = get_dirname_label_map_full_video()
     dirname_quality_map = get_dirname_good_quality_frame_map()
 
-    train_dirname_label_df, val_dirname_label_df, test_dirname_label_df = get_subject_ids(dirname_label_df)
+    train_dirname_label_df, val_dirname_label_df, test_dirname_label_df = get_subject_ids(dirname_label_df, test_subject_ids)
 
     create_new_datastructure_from_df(struct_type, train_dirname_label_df, train_dir, dirname_quality_map)
     create_new_datastructure_from_df(struct_type, val_dirname_label_df, val_dir, dirname_quality_map)
@@ -344,7 +349,6 @@ def create_EBUS_data(struct_type):
     crop_all_images_in_path(test_dir, struct_type)
 
 create_EBUS_data('sequence')
-
 
 
 # old code, TODO: remove?
