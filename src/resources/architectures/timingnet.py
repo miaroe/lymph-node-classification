@@ -25,13 +25,13 @@ def TimingNet(input_shape=None, num_stations=None):
     time_distributed = layers.TimeDistributed(layers.Flatten())(conv3d_6)
     #time_distributed = layers.TimeDistributed(layers.GlobalMaxPooling3D())(conv3d_5)
 
-    lstm_1 = LSTM(32, return_sequences=True, go_backwards=False, kernel_regularizer=l2(1e-4))(time_distributed)
-    lstm_2 = LSTM(32, return_sequences=False, go_backwards=False, kernel_regularizer=l2(1e-4))(lstm_1)
+    lstm_1 = LSTM(128, return_sequences=True, go_backwards=False, kernel_regularizer=l2(1e-4))(time_distributed)
+    lstm_2 = LSTM(128, return_sequences=False, go_backwards=False, kernel_regularizer=l2(1e-4))(lstm_1)
 
     #x = Conv1D(num_stations, 3)(lstm_2)
     #x = PReLU()(x)
     #x = GlobalAveragePooling1D()(x)
-    x = tf.keras.layers.Dense(32, activation='relu')(lstm_2)
+    x = tf.keras.layers.Dense(256, activation='relu')(lstm_2)
     x = tf.keras.layers.Dropout(0.5)(x)
 
     output = tf.keras.layers.Dense(num_stations, activation='softmax')(x)

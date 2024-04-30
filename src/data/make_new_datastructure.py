@@ -98,13 +98,14 @@ def get_label_sequences(df):
 
 #------------------ New data structure helper functions ------------------#
 
-def get_subject_ids(dirname_label_df, test_patient_ids=None):
+def get_subject_ids(dirname_label_df, val_patient_ids=None, test_patient_ids=None):
     """
     chooses which patients to use for training and validation at random according to subject_id column and validation_split
     if test_patient_ids is not None, then the test_patient_ids are used for testing and the rest for training and validation
-    else, the test_patient_ids are chosen at random according to test_split
+    else, the test_patient_ids are chosen at random according to test_split. Same for val_patient_ids.
 
     :param dirname_label_df:
+    :param val_patient_ids:
     :param test_patient_ids:
     :return:
     """
@@ -112,14 +113,18 @@ def get_subject_ids(dirname_label_df, test_patient_ids=None):
     unique_patient_ids = dirname_label_df['patient_id'].unique()
     print('unique_patient_ids: ', unique_patient_ids)
     print('test_patient_ids: ', test_patient_ids)
+    print('val_patient_ids: ', val_patient_ids)
     np.random.shuffle(unique_patient_ids)
     num_val_patients = int(len(unique_patient_ids) * validation_split)
     print('num_val_patients: ', num_val_patients)
 
     if test_patient_ids is not None: # set test patient ids manually
         unique_patient_ids = [patient_id for patient_id in unique_patient_ids if patient_id not in test_patient_ids]
-        train_patient_ids = unique_patient_ids[num_val_patients:]
-        val_patient_ids = unique_patient_ids[:num_val_patients]
+        if val_patient_ids is not None:
+            train_patient_ids = [patient_id for patient_id in unique_patient_ids if patient_id not in val_patient_ids]
+        else:
+            train_patient_ids = unique_patient_ids[num_val_patients:]
+            val_patient_ids = unique_patient_ids[:num_val_patients]
     else:
         num_test_patients = int(len(unique_patient_ids) * test_split)
 
@@ -318,9 +323,10 @@ def create_EBUS_data(struct_type):
     val_dir = os.path.join(data_path, 'val')
     test_dir = os.path.join(data_path, 'test')
 
-    #'Patient_005', 'Patient_016', 'Patient_024', 'Patient_036'
-    #test_subject_ids = [715, 724, 735, 743]
+    #'Patient_001', 'Patient_022', 'Patient_20231107-093258', 'Patient_20231129-091812'
     test_subject_ids = ['8', '34', '14', '48', '42']
+    #'Patient_030', 'Patient_028', 'Patient_021', 'Patient_015', 'Patient_040', 'Patient_034', 'Patient_023', 'Patient_029', 'Patient_20240116-101109', 'Patient_002'
+    val_subject_ids = ['7', '11', '16', '21', '22', '26', '31', '38', '49', '53']
 
     # remove old data structure
     if os.path.exists(train_dir):
@@ -335,7 +341,7 @@ def create_EBUS_data(struct_type):
     dirname_label_df = get_dirname_label_map_full_video()
     dirname_quality_map = get_dirname_good_quality_frame_map()
 
-    train_dirname_label_df, val_dirname_label_df, test_dirname_label_df = get_subject_ids(dirname_label_df, test_subject_ids)
+    train_dirname_label_df, val_dirname_label_df, test_dirname_label_df = get_subject_ids(dirname_label_df, val_subject_ids, test_subject_ids)
 
     create_new_datastructure_from_df(struct_type, train_dirname_label_df, train_dir, dirname_quality_map)
     create_new_datastructure_from_df(struct_type, val_dirname_label_df, val_dir, dirname_quality_map)
@@ -350,36 +356,3 @@ def create_EBUS_data(struct_type):
 
 create_EBUS_data('sequence')
 
-
-# old code, TODO: remove?
-def balance_dataset(root_folder):
-    """
-    This function is used to balance the dataset by deleting frames from the folders with the most frames
-
-    :param root_folder:
-    :return:
-    """
-    # Step 1: Find the folder with the least number of frames
-    min_frames = float('inf')
-    for station in os.listdir(root_folder):
-        folder_path = os.path.join(root_folder, station)
-        if os.path.isdir(folder_path):
-            num_frames = len(os.listdir(folder_path))
-            if num_frames < min_frames:
-                min_frames = num_frames
-
-    # Step 2: Get the list of frames in all folders
-    for station in os.listdir(root_folder):
-        folder_path = os.path.join(root_folder, station)
-        if os.path.isdir(folder_path):
-            frame_list = os.listdir(folder_path)
-
-            # Step 3: Delete extra frames from each folder
-            if len(frame_list) > min_frames:
-                num_frames_to_delete = len(frame_list) - min_frames
-                for i in range(num_frames_to_delete):
-                    frame_to_delete = frame_list.pop()
-                    frame_to_delete_path = os.path.join(folder_path, frame_to_delete)
-                    os.remove(frame_to_delete_path)
-
-# balance_dataset(data_path)
