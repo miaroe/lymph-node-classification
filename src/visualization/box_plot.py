@@ -95,10 +95,10 @@ def create_box_plot():
 
     plt.figure(figsize=(18, 8))
     sns.set(style="whitegrid")
-    sns.boxplot(x='Station', y='Score', hue='Metric', data=combined_long, palette={'Clinician precision': '#fb8072', 'Clinician recall': '#bebada'})
+    sns.boxplot(x='Station', y='Score', hue='Metric', data=combined_long, palette={'Clinician precision': '#8DD3C7', 'Clinician recall': '#AFA9DA'})
 
     # Add the CNN values from the values_long to the plot as points, centered on the boxes
-    sns.stripplot(x='Station', y='Score', hue='Metric', data=values_long, dodge=True, jitter=False, size=10, linewidth=2, palette={'CNN precision': '#fb8072', 'CNN recall': '#bebada'})
+    #sns.stripplot(x='Station', y='Score', hue='Metric', data=values_long, dodge=True, jitter=False, size=10, linewidth=2, palette={'CNN precision': '#fb8072', 'CNN recall': '#bebada'})
 
     # Add labels
     plt.xlabel('Station', fontsize=20)

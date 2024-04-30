@@ -21,15 +21,15 @@ def plot_learning_curve(model_path, reports_path):
     colors = ['#8dd3c7', '#fdb462']
 
     # Plot and label the training and validation loss values
-    plt.plot(epochs, train_loss, label='Training Loss', color=colors[0], linewidth=3)
-    plt.plot(epochs, val_loss, label='Validation Loss', color=colors[1], linewidth=3)
+    plt.plot(epochs, train_loss, label='Training Loss', color=colors[0], linewidth=2.5)
+    plt.plot(epochs, val_loss, label='Validation Loss', color=colors[1], linewidth=2.5)
 
     # Add axes labels
     plt.xlabel('Epochs', fontsize=20)
     plt.ylabel('Loss', fontsize=20)
 
-    # Set the ticks with an interval of 5
-    ax.set_xticks(range(0, len(train_loss), 5))
+    # Set the ticks
+    ax.set_xticks(range(0, len(train_loss), 10))
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.tick_params(top=False, right=False)

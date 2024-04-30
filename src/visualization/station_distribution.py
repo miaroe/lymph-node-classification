@@ -20,9 +20,54 @@ def station_distribution_figure_and_report(train_ds, val_ds, num_stations, stati
     text_kwargs = {'fontsize': 13, 'horizontalalignment': 'center'}
 
     if test_ds is not None:
+        # Figure with stacked bars
+        colors = ['#80B1D3', '#8dd3c7', '#bebada']
+        width = 0.5  # width of bars
+
+        bottom = np.zeros(num_stations)  # For stacking bars
+        x = np.arange(0.2, num_stations + 0.2, 1)  # the label locations
+
+        for ds_label, batch_gen_i in zip (('train', 'validation', 'test'), (train_ds, val_ds, test_ds)):
+            counter = 0 if ds_label == 'train' else 1 if ds_label == 'validation' else 2
+            count_array = count_station_distribution(batch_gen_i, num_stations)
+
+            ax.bar(x, height=count_array, width=width, bottom=bottom, label=ds_label,
+                   color=colors[counter], align='center')
+            bottom += count_array
+            # set text in the middle of the bars
+            for j in range(num_stations):
+                ax.text(x=x[j], y=bottom[j] - count_array[j] / 2 - 40,
+                        s=str(count_array[j]), **text_kwargs)
+
+            ax.set_xticks(x)
+            ax.set_xticklabels(stations_config.keys(), fontsize=16)
+            ax.yaxis.set_tick_params(labelsize=16)
+            ax.legend(fontsize=18)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.tick_params(top=False, right=False)
+
+            plt.xlabel('Lymph node station', fontsize=20)
+            plt.ylabel('Number of frames', fontsize=20)
+            ax.set_ylim(0, max(bottom) * 1.1)  # Adjust based on maximum stacked value
+            ax.set_xlim(-0.2, num_stations - 1 + 0.5)
+
+            # Save figure to reports folder
+            fig_path = os.path.join(reports_path, 'figures/')
+            os.makedirs(fig_path, exist_ok=True)
+            plt.savefig(fig_path + 'station_distribution.png', bbox_inches='tight', dpi=300)
+
+            # -------------------------------------------- REPORT --------------------------------------------
+            df = []
+            for idx, elem in enumerate(count_array):
+                df.append([list(stations_config.keys())[idx], elem])
+            df.append(['Total', np.sum(count_array)])
+
+            df = pd.DataFrame(df, columns=['Station', 'Files'])
+            df.to_csv(reports_path + f'station_distribution_{ds_label}.csv', sep='\t', index=False)
+        '''
         colors = ['#80B1D3', '#8dd3c7', '#bebada']
         width = 0.3  # width of bars
-
         for ds_label, batch_gen_i, offset in zip(('train', 'validation', 'test'), (train_ds, val_ds, test_ds), (-width + width/2, width/2, width + width/2)):
 
             counter = 0 if ds_label == 'train' else 1 if ds_label == 'validation' else 2
@@ -65,7 +110,7 @@ def station_distribution_figure_and_report(train_ds, val_ds, num_stations, stati
 
             df = pd.DataFrame(df, columns=['Station', 'Files'])
             df.to_csv(reports_path + f'station_distribution_{ds_label}.csv', sep='\t', index=False)
-
+        '''
     else:
         colors = ['#80B1D3', '#bebada']
         width = 0.4  # width of bars

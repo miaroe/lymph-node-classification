@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import h5py
 import matplotlib.pyplot as plt
+import tensorflow as tf
 
 from mlmia.architectures import UNet
 from mlmia.keras.losses import DiceLoss
@@ -10,6 +11,7 @@ from skimage.transform import resize
 from tensorflow import one_hot
 from skimage.morphology.convex_hull import grid_points_in_poly
 from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.patches import Patch
 
 # modified code from https://github.com/ingridtv/ebus-lymph-node/blob/main/scripts/publication/plot_gt_pred_comparison.py
 
@@ -65,9 +67,8 @@ def load_seg_model(seg_model_path, instance_size):
     return model
 
 def preprocess_img(img):
-    img = cv2.imread(img, cv2.IMREAD_GRAYSCALE)
+    img = (img[..., None] / 255.0).astype(np.float32)
     img = resize(img, output_shape=(256, 256), preserve_range=True, anti_aliasing=False)
-    img = (img[..., None]/255.0).astype(np.float32)
     img = np.expand_dims(img, axis=0)
     return img
 
@@ -99,24 +100,53 @@ def get_img_ultrasound_sector_mask():
     img_mask = ultrasound_sector_mask(reference_image_shape=(1080, 1920))[100:1035, 530:1658]
     return resize(img_mask, (256, 256, 1), preserve_range=True, anti_aliasing=False).astype(dtype=bool)
 
-def plot_seg_image(img, mask):
+def plot_seg_image(seg_model_path, img_path):
+    seg_model = load_seg_model(seg_model_path, (256, 256, 1))
+
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    print(img.shape)
+    preprocessed_img = preprocess_img(img)
+    pred = seg_model.predict(preprocessed_img)[0]  # (img_height, img_width, num_classes)
+
+    mask = np.argmax(pred, axis=-1) # convert class probability map into single segmentation mask with index of highest probability
+
     c_invalid = (0, 0, 0)
     colors = [(0.2, 0.2, 0.2),  # dark gray = background
-              (0, 0.4, 0.05),  # green = lymph nodes
+              (0.55, 0.4, 0.85), # purple = lymph nodes
               (0.76, 0.1, 0.05)]  # red   = blood vessels
 
     label_cmap = LinearSegmentedColormap.from_list('label_map', colors, N=3)
-    label_cmap.set_bad(color=c_invalid, alpha=0) # set invalid (nan) colors to be transparent
+    label_cmap.set_bad(color=c_invalid, alpha=0)  # set invalid (nan) colors to be transparent
     image_cmap = plt.cm.get_cmap('gray')
     image_cmap.set_bad(color=c_invalid)
 
-    img_mask = get_img_ultrasound_sector_mask()
-    img = np.ma.array(img, mask=~img_mask)
+    # Resize mask to cropped frame size
+    mask_resized = resize(mask, (935, 1128), preserve_range=True, order=0).astype(mask.dtype)
 
-    mask = np.ma.masked_less_equal(mask, 0)
-    mask = np.ma.array(mask, mask=~img_mask)
+    mask_resized = np.ma.masked_less_equal(mask_resized, 0)  # mask out background
 
-    plt.imshow(img, cmap=image_cmap)
-    plt.imshow(mask, cmap=label_cmap, interpolation='nearest', alpha=0.3, vmin=0, vmax=2)
-    plt.axis('off')
-    plt.show()
+    plt.style.use('dark_background')
+    fig, ax = plt.subplots(figsize=(9, 6))
+
+    ax.imshow(img, cmap=image_cmap)
+    ax.imshow(mask_resized, cmap=label_cmap, interpolation='nearest', alpha=0.4, vmin=0, vmax=2)
+
+    # Define legend patches
+    legend_patches = [
+        Patch(color=colors[1], label='Lymph node'),
+        Patch(color=colors[2], label='Blood vessel'),
+    ]
+
+    # Add the legend to the plot
+    ax.legend(handles=legend_patches, loc='upper left', fontsize=16, frameon=True, edgecolor='black')
+
+    ax.axis('off')
+    plt.tight_layout()
+
+    # save image
+    fig_path = '/home/miaroe/workspace/lymph-node-classification/figures/'
+    os.makedirs(fig_path, exist_ok=True)
+    plt.savefig(fig_path + 'segmentation_masks.png', bbox_inches='tight')
+
+
+#plot_seg_image('/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/segmentation-unet-20230614/','/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs/test/4L/208.png')
