@@ -116,15 +116,16 @@ class BaselineTrainer(Trainer):
     # Set up pipeline
     def preprocess(self):
         self.pipeline = Baseline(data_path=self.data_path,
-                                                       batch_size=self.batch_size,
-                                                       image_shape=self.image_shape,
-                                                       validation_split=self.validation_split,
-                                                       test_split=self.test_split,
-                                                       station_names=list(self.stations_config.keys()),
-                                                       num_stations=self.num_stations,
-                                                       augment=self.augment,
-                                                       stations_config=self.stations_config
-                                                       )
+                                 batch_size=self.batch_size,
+                                 image_shape=self.image_shape,
+                                 validation_split=self.validation_split,
+                                 test_split=self.test_split,
+                                 station_names=list(self.stations_config.keys()),
+                                 num_stations=self.num_stations,
+                                 augment=self.augment,
+                                 stations_config=self.stations_config,
+                                 model_arch=self.model_arch,
+                                 )
         if self.use_quality_weights:
             self.train_ds, self.val_ds, self.test_ds = self.pipeline.loader_function_with_quality()
 
@@ -137,9 +138,9 @@ class BaselineTrainer(Trainer):
             for images, labels, quality in self.train_ds.take(1):
                 for i in range(9):
                     ax = plt.subplot(3, 3, i + 1)
-                    # normalize image from range [-1, 1] to [0, 1]
-                    #image = (images[i] + 1) / 2
-                    image = images[i] / 255
+                    # normalize image from range [-1, 1] to [0, 255]
+                    image = (images[i] + 1. / 2.)
+                    #image = images[i] / 255
                     plt.imshow(image)
                     plt.axis("off")
                     if self.num_stations > 2:
@@ -271,8 +272,8 @@ class BaselineTrainer(Trainer):
             self.model.fit(self.train_ds,
                            epochs=self.epochs,
                            validation_data=self.val_ds,
-                           callbacks=[save_best, early_stop, self.experiment_logger])
-                           #class_weight=get_class_weight(self.train_ds, self.num_stations))
+                           callbacks=[save_best, early_stop, self.experiment_logger],
+                           class_weight=get_class_weight(self.train_ds, self.num_stations))
 
             best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
             best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
@@ -318,8 +319,7 @@ class SequenceTrainer(Trainer):
                                  model_arch=self.model_arch,
                                  instance_size=self.instance_size,
                                  full_video=self.full_video,
-                                 use_gen=self.use_gen,
-                                 use_quality_weights=self.use_quality_weights
+                                 use_gen=self.use_gen
                                  )
 
         if self.use_quality_weights:
@@ -342,7 +342,9 @@ class SequenceTrainer(Trainer):
                     for image in range(self.seq_length):
                         num_images += 1
                         plt.subplot(4, 4, image + 1)
-                        plt.imshow(np.array(images[seq][image]).astype("uint8"))
+                        #normalize from [-1,1] to [0, 255]
+                        image_norm = (images[seq][image] + 1. / 2.) * 255
+                        plt.imshow(np.array(image_norm).astype("uint8"))
                         plt.title(
                             f"Frame {image}, Label: {self.pipeline.station_names[np.argmax(labels.numpy()[seq])]}",
                             fontsize=10)
@@ -355,7 +357,7 @@ class SequenceTrainer(Trainer):
 
         else:
             self.train_ds, self.val_ds = self.pipeline.loader_function()
-
+            '''
             plt.style.use('ggplot')
             # print the value range of the pixels
             for images, labels in self.train_ds.take(1):
@@ -372,7 +374,8 @@ class SequenceTrainer(Trainer):
                     for image in range(self.seq_length):
                         num_images += 1
                         plt.subplot(4, 4, image + 1)
-                        plt.imshow(np.array(images[seq][image]).astype("uint8"))
+                        image_norm = (images[seq][image] + 1) * 127.5
+                        plt.imshow(np.array(image_norm).astype("uint8"))
                         plt.title(f"Frame {image}, Label: {self.pipeline.station_names[np.argmax(labels.numpy()[seq])]}",
                                   fontsize=10)
                         plt.axis("off")
@@ -381,6 +384,7 @@ class SequenceTrainer(Trainer):
                     plt.suptitle(f"Batch {i}, Sequence {seq}", fontsize=16)
                     plt.show()
             print(f"Total images: {num_images}")
+            '''
 
     # -----------------------------  BUILDING AND SAVING MODEL ----------------------------------
 
@@ -425,12 +429,12 @@ class SequenceTrainer(Trainer):
                                    patience=train_config.early_stop_patience, verbose=1)
 
         # time = TimingCallback()
-        '''
+
         class_metrics = ClassMetricsCallback(station_names=self.pipeline.station_names,
                                              train_ds=self.train_ds.take(self.steps_per_epoch),
                                              val_ds=self.val_ds.take(self.validation_steps),
                                              save_path=os.path.join(self.model_path, 'metrics.csv'))
-        '''
+
 
         return save_best, early_stop, tb_logger
 
@@ -442,7 +446,7 @@ class SequenceTrainer(Trainer):
 
         print("-- TRAINING --")
 
-        save_best, early_stop, tb_logger = self.save_model()
+        save_best, early_stop, tb_logger = self.save_model() #class_metrics
         if self.use_gen:
             print("Number of training sequences: ", self.steps_per_epoch)
             print("Number of validation sequences: ", self.validation_steps)
@@ -452,7 +456,6 @@ class SequenceTrainer(Trainer):
                            steps_per_epoch=self.steps_per_epoch, # number of sequences / batch_size
                            validation_steps=self.validation_steps,
                            callbacks=[save_best, early_stop, self.experiment_logger, tb_logger])
-                           #class_weight=get_class_weight(self.train_ds.take(self.steps_per_epoch), self.num_stations))
         else:
             self.model.fit(self.train_ds,
                            epochs=self.epochs,
@@ -484,35 +487,35 @@ class SequenceWithSegmentationTrainer(Trainer):
     def preprocess(self):
 
         self.pipeline = SequenceWithSegmentation(data_path=self.data_path,
-                                                                       model_type=self.model_type,
-                                                                       batch_size=self.batch_size,
-                                                                       image_shape=self.image_shape,
-                                                                       validation_split=self.validation_split,
-                                                                       test_split=self.test_split,
-                                                                       station_names=list(self.stations_config.keys()),
-                                                                       num_stations=self.num_stations,
-                                                                       augment=self.augment,
-                                                                       stations_config=self.stations_config,
-                                                                       seq_length=self.seq_length,
-                                                                       set_stride=self.set_stride,
-                                                                       model_arch=self.model_arch,
-                                                                       instance_size=self.instance_size
-                                                                       )
+                                                 model_type=self.model_type,
+                                                 batch_size=self.batch_size,
+                                                 image_shape=self.image_shape,
+                                                 validation_split=self.validation_split,
+                                                 test_split=self.test_split,
+                                                 station_names=list(self.stations_config.keys()),
+                                                 num_stations=self.num_stations,
+                                                 augment=self.augment,
+                                                 stations_config=self.stations_config,
+                                                 seq_length=self.seq_length,
+                                                 set_stride=self.set_stride,
+                                                 model_arch=self.model_arch,
+                                                 instance_size=self.instance_size
+                                                 )
 
 
-        self.train_ds, self.val_ds = self.pipeline.loader_function()
-        '''
+        self.train_ds, self.val_ds = self.pipeline.loader_function_multi_input()
+
         plt.style.use('dark_background')
         # print the value range of the pixels
         for data in self.train_ds.take(1):
             images, labels = data
 
-            #Assuming 'images' is a dictionary with keys 'image_input' and 'mask_input'
-            image_input = images['image_input']
-            mask_input = images['mask_input']
+            # images is first channel and masks is second and third channel
+            image_input = images[0]
+            mask_input = images[1]
+            print('Image :', image_input.shape)  # e.g., (batch_size, seq_length, height, width, channels)
+            print('Mask :', mask_input.shape)  # e.g., (batch_size, seq_length, height, width, mask_channels)
 
-            print('Image input shape:', image_input.shape)  # e.g., (batch_size, seq_length, height, width, channels)
-            print('Mask input shape:', mask_input.shape)  # e.g., (batch_size, seq_length, height, width, mask_channels)
 
             for i in range(self.batch_size):
                 c_invalid = (0, 0, 0)
@@ -530,42 +533,8 @@ class SequenceWithSegmentationTrainer(Trainer):
 
                 pred = np.argmax(mask, axis=-1)
                 plt.imshow(image, cmap=image_cmap)
-                plt.imshow(pred, cmap=label_cmap, interpolation='nearest', alpha=0.3, vmin=0, vmax=2)
-                plt.title(f'Label: {labels[i]} (batch {i})')
-                plt.axis('off')
-                plt.show()
-        '''
-
-        plt.style.use('dark_background')
-        # print the value range of the pixels
-        for data in self.train_ds.take(1):
-            images, labels = data
-            print('Image input shape:', images.shape)  # e.g., (batch_size, seq_length, height, width, channels)
-
-            # images is first channel and masks is second and third channel
-            image_input = images[:, :, :, :, 0]
-            mask_input = images[:, :, :, :, 1:]
-            print('Image :', image_input.shape)  # e.g., (batch_size, seq_length, height, width, channels)
-            print('Mask :', mask_input.shape)  # e.g., (batch_size, seq_length, height, width, mask_channels)
-
-
-            for i in range(self.batch_size):
-                c_invalid = (0, 0, 0)
-                colors = [ (0, 0.4, 0.05),  # green = lymph nodes
-                          (0.76, 0.1, 0.05)]  # red   = blood vessels
-
-                label_cmap = LinearSegmentedColormap.from_list('label_map', colors, N=2)
-                label_cmap.set_bad(color=c_invalid, alpha=0)  # set invalid (nan) colors to be transparent
-                image_cmap = plt.cm.get_cmap('gray')
-                image_cmap.set_bad(color=c_invalid)
-
-                image = image_input[i][0] / 255
-                mask = mask_input[i][0] / 255
-
-                pred = np.argmax(mask, axis=-1)
-                plt.imshow(image, cmap=image_cmap)
-                plt.imshow(pred, cmap=label_cmap, interpolation='nearest', alpha=0.3, vmin=0, vmax=2)
-                plt.title(f'Label: {labels[i]} (batch {i})')
+                plt.imshow(pred, cmap=label_cmap, interpolation='nearest', alpha=0.4, vmin=0, vmax=2)
+                plt.title(f'Batch {i}, Label: {self.pipeline.station_names[np.argmax(labels.numpy()[i])]}')
                 plt.axis('off')
                 plt.show()
 
@@ -626,16 +595,12 @@ class SequenceWithSegmentationTrainer(Trainer):
         self.build_model()
 
         print("-- TRAINING --")
-        print("Number of training sequences: ", self.steps_per_epoch)
-        print("Number of validation sequences: ", self.validation_steps)
 
         save_best, early_stop, tb_logger, class_metrics = self.save_model()
 
         self.model.fit(self.train_ds,
                        epochs=self.epochs,
                        validation_data=self.val_ds,
-                       steps_per_epoch=self.steps_per_epoch,  # number of sequences / batch_size
-                       validation_steps=self.validation_steps,
                        callbacks=[save_best, early_stop, self.experiment_logger, tb_logger, class_metrics])
 
         best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)

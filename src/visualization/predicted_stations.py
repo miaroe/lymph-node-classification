@@ -38,7 +38,7 @@ def plot_pred_stations(station_labels, pred, frame):
         probs = np.array([pos_prob, neg_prob])
         pred_int = (probs >= 0.5).astype(int)
 
-        print('probs: ', probs)  # these values are really low compared to the values from model.predict TODO fix this
+        print('probs: ', probs)
         print('pred_int: ', pred_int)
         for i in pred_int:
             plt.bar(station_labels[i], probs[i])

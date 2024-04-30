@@ -1,6 +1,4 @@
-import os
 import numpy as np
-from src.resources.config import *
 
 def count_station_distribution(dataset, num_stations):
     count_array = np.zeros(shape=num_stations, dtype=int)
