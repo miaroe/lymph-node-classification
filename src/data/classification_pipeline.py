@@ -303,20 +303,8 @@ class Sequence(ClassificationPipeline):
         #img = tf.expand_dims(img, axis=-1) # add channel dimension if color_mode='grayscale'
         return img
 
-    def load_image_sequence(self, frame_paths, augment):
+    def load_image_sequence(self, frame_paths):
         sequence = [self.load_image(frame_path) for frame_path in frame_paths] # numpy list of tf tensors
-        sequence = tf.stack(sequence)
-
-        if augment:
-            sequence = self.data_augmentationSeq(sequence)
-
-        if self.model_arch == 'mobileNetV3Small-lstm' or self.model_arch == 'vgg16-lstm' or self.model_arch == 'resnet-lstm':
-            # normalize from [0,1] to [0,255]
-            sequence = [frame * 255.0 for frame in sequence]
-        elif self.model_arch == 'inception-lstm' or self.model_arch == 'mobilenetV2-lstm':
-            # normalize from [0,1] to [-1,1]
-            sequence = [(frame * 2.0) - 1.0 for frame in sequence]
-
         if len(sequence) != self.seq_length:
             # add zero padding to make the total equal seq_length
             zero_frame = np.zeros_like(sequence[-1], dtype=np.float32)
@@ -350,7 +338,7 @@ class Sequence(ClassificationPipeline):
 
 
     # Function to create image sequences of seq_length for one station for one patient
-    def create_sequence(self, station_path, augment=False):
+    def create_sequence(self, station_path):
         station_path = station_path.numpy().decode('utf-8')  # converts station path from tf tensor to string
         frame_paths = get_frame_paths(station_path, self.model_type)  # gets frame paths for one station
         num_frames = len(frame_paths)
@@ -362,11 +350,11 @@ class Sequence(ClassificationPipeline):
             start_index = random.randint(0, num_frames - (self.seq_length * stride))
         end_index = start_index + (self.seq_length * stride)
         sequence_paths = frame_paths[start_index:end_index:stride]  # len(sequence_paths) = seq_length (or less)
-        sequence = self.load_image_sequence(sequence_paths, augment)
+        sequence = self.load_image_sequence(sequence_paths)
         return sequence
 
     # loading qualities before creating the sequence due to eager execution error when passing dictionary to map function
-    def create_sequence_with_quality(self, station_path, label, ds_label, augment=False):
+    def create_sequence_with_quality(self, station_path, label, ds_label):
         station_path = station_path.numpy().decode('utf-8')  # converts station path from tf tensor to string
         frame_paths = get_frame_paths(station_path, self.model_type)  # gets frame paths for one station
         num_frames = len(frame_paths)
@@ -382,7 +370,7 @@ class Sequence(ClassificationPipeline):
         # find the average quality score for the sequence
         qualities = np.array(qualities)
         quality = np.mean(qualities)
-        sequence = self.load_image_sequence(sequence_paths, augment)
+        sequence = self.load_image_sequence(sequence_paths)
         return sequence, label, quality
 
     # Function to create multiple image sequences of seq_length for one station for one patient
@@ -433,6 +421,16 @@ class Sequence(ClassificationPipeline):
         #augmentation_layers = [Blur(sigma_max=0.1)]
         return RandomAugmentationSequence(augmentation_layers)(x)
 
+    @tf.function
+    def data_augmentation_map(self, x, y):
+        augmented_x = tf.py_function(func=self.data_augmentationSeq, inp=[x], Tout=tf.float32)
+        return augmented_x, y
+
+    @tf.function
+    def data_augmentation_map_with_quality(self, x, y, z):
+        augmented_x = tf.py_function(func=self.data_augmentationSeq, inp=[x], Tout=tf.float32)
+        return augmented_x, y, z
+
 
     def loader_function(self):
         if self.full_video:
@@ -464,12 +462,27 @@ class Sequence(ClassificationPipeline):
 
             # creates sequence of image paths for each station using tf.py_function
             train_ds = train_ds.map(lambda x, y: (tf.py_function(func=self.create_sequence,
-                                                                     inp=[x, True], Tout=tf.float32), y),
+                                                                     inp=[x], Tout=tf.float32), y),
                                         num_parallel_calls=tf.data.AUTOTUNE)
 
             val_ds = val_ds.map(lambda x, y: (tf.py_function(func=self.create_sequence,
                                                                  inp=[x], Tout=tf.float32), y),
                                     num_parallel_calls=tf.data.AUTOTUNE)
+
+            if self.augment:
+                # apply data augmentation to training data
+                train_ds = train_ds.map(self.data_augmentation_map, num_parallel_calls=tf.data.AUTOTUNE)
+
+            if self.model_arch in ['resnet-lstm', 'mobileNetV3Small-lstm']:
+                # scale each image back to [0, 255]
+                print("scaling images to [0, 255]")
+                train_ds = train_ds.map(lambda x, y: (x * 255.0, y), num_parallel_calls=tf.data.AUTOTUNE)
+                val_ds = val_ds.map(lambda x, y: (x * 255.0, y), num_parallel_calls=tf.data.AUTOTUNE)
+
+            if self.model_arch in ['inception-lstm', 'mobilenetV2-lstm']:
+                # scale from [0, 1] to [-1, 1]
+                train_ds = train_ds.map(lambda x, y: ((x - 0.5) * 2.0, y), num_parallel_calls=tf.data.AUTOTUNE)
+                val_ds = val_ds.map(lambda x, y: ((x - 0.5) * 2.0, y), num_parallel_calls=tf.data.AUTOTUNE)
 
 
         # batch and prefetch the datasets
@@ -486,12 +499,26 @@ class Sequence(ClassificationPipeline):
 
         # creates sequence of image paths for each station using tf.py_function
         train_ds = train_ds.map(lambda x, y, z: (tf.py_function(func=self.create_sequence_with_quality,
-                                                               inp=[x, y, 'train', True], Tout=(tf.float32, tf.float32, tf.float32))),
+                                                               inp=[x, y, 'train'], Tout=(tf.float32, tf.float32, tf.float32))),
                                  num_parallel_calls=tf.data.AUTOTUNE)
 
         val_ds = val_ds.map(lambda x, y, z: (tf.py_function(func=self.create_sequence_with_quality,
                                                            inp=[x, y, 'val'], Tout=(tf.float32, tf.float32, tf.float32))),
                              num_parallel_calls=tf.data.AUTOTUNE)
+
+        if self.augment:
+            # apply data augmentation to training data
+            train_ds = train_ds.map(self.data_augmentation_map_with_quality, num_parallel_calls=tf.data.AUTOTUNE)
+
+        if self.model_arch in ['resnet-lstm', 'mobileNetV3Small-lstm']:
+            # scale each image back to [0, 255]
+            train_ds = train_ds.map(lambda x, y, z: (x * 255.0, y, z), num_parallel_calls=tf.data.AUTOTUNE)
+            val_ds = val_ds.map(lambda x, y, z: (x * 255.0, y, z), num_parallel_calls=tf.data.AUTOTUNE)
+
+        if self.model_arch in ['inception-lstm', 'mobilenetV2-lstm']:
+            # scale from [0, 1] to [-1, 1]
+            train_ds = train_ds.map(lambda x, y, z: ((x - 0.5) * 2.0, y, z), num_parallel_calls=tf.data.AUTOTUNE)
+            val_ds = val_ds.map(lambda x, y, z: ((x - 0.5) * 2.0, y, z), num_parallel_calls=tf.data.AUTOTUNE)
 
 
         def set_shapes(images, labels, qualities):
@@ -538,7 +565,7 @@ class SequenceWithSegmentation(ClassificationPipeline):
             image = np.repeat(image, 3, axis=-1) # repeat grayscale image to create 3 channels
             return image, mask
 
-    def load_image_sequence_multi_input(self, frame_paths, augment):
+    def load_image_sequence_multi_input(self, frame_paths):
         images_sequence = []
         masks_sequence = []
         for frame_path in frame_paths:
@@ -546,34 +573,17 @@ class SequenceWithSegmentation(ClassificationPipeline):
             images_sequence.append(image)
             masks_sequence.append(mask)
 
-        images_sequence = tf.stack(images_sequence)
-        masks_sequence = tf.stack(masks_sequence)
-
-        if augment:
-            images_sequence = self.data_augmentationSeq(images_sequence)
-
-        if self.model_arch == 'mutli-input_mobileNetV3Small-lstm':
-            # normalize from [0,1] to [0,255]
-            images_sequence = images_sequence * 255.0
-            masks_sequence = masks_sequence * 255.0
-
-        elif self.model_arch == 'mutli-input_mobilenetV2-lstm':
-            # normalize from [0,1] to [-1,1]
-            images_sequence = (images_sequence * 2.0) - 1.0
-            masks_sequence = (masks_sequence * 2.0) - 1.0
-
         # Ensure sequences are padded to the desired length
         while len(images_sequence) < self.seq_length:
             images_sequence.append(np.zeros((self.instance_size[0], self.instance_size[1], 3)))
             masks_sequence.append(np.zeros((self.instance_size[0], self.instance_size[1], 3)))
-
 
         images_sequence = tf.stack(images_sequence)
         masks_sequence = tf.stack(masks_sequence)
         return images_sequence, masks_sequence
 
     # Function to create image sequences and mask sequences of seq_length for one station for one patient
-    def create_multi_input_sequence(self, station_path, augment=False):
+    def create_multi_input_sequence(self, station_path):
         station_path = station_path.numpy().decode('utf-8')  # converts station path from tf tensor to string
         frame_paths = get_frame_paths(station_path, self.model_type)
         num_frames = len(frame_paths)
@@ -587,9 +597,9 @@ class SequenceWithSegmentation(ClassificationPipeline):
         end_index = start_index + (self.seq_length * stride)
         sequence_paths = frame_paths[start_index:end_index:stride]  # len(sequence_paths) = seq_length (or less)
 
-        image_sequence, mask_sequence = self.load_image_sequence_multi_input(sequence_paths, augment)
+        image_sequence, mask_sequence = self.load_image_sequence_multi_input(sequence_paths)
 
-        # Return a dictionary with separate inputs for images and masks
+        # Return a tuple of images and masks
         return image_sequence, mask_sequence
 
     def data_augmentationSeq(self, x):
@@ -598,6 +608,11 @@ class SequenceWithSegmentation(ClassificationPipeline):
                                             GaussianShadow(sigma_x=(0.1, 0.5), sigma_y=(0.1, 0.9), strength=(0.5, 0.8))]
 
         return RandomAugmentationSequence(augmentation_layers_segmentation)(x)
+
+    @tf.function
+    def data_augmentation_map_multi_input(self, x, y):
+        augmented_x = tf.py_function(func=self.data_augmentationSeq, inp=[x[0]], Tout=tf.float32)
+        return (augmented_x, x[1]), y
 
 
     def loader_function_multi_input(self):
@@ -610,12 +625,26 @@ class SequenceWithSegmentation(ClassificationPipeline):
 
         # creates sequence of image paths for each station using tf.py_function
         train_ds = train_ds.map(lambda x, y: (tf.py_function(func=self.create_multi_input_sequence,
-                                                                inp=[x, True], Tout=[tf.float32, tf.float32]), y),
+                                                                inp=[x], Tout=[tf.float32, tf.float32]), y),
                                     num_parallel_calls=tf.data.AUTOTUNE)
 
         val_ds = val_ds.map(lambda x, y: (tf.py_function(func=self.create_multi_input_sequence,
                                                             inp=[x], Tout=[tf.float32, tf.float32]), y),
                                 num_parallel_calls=tf.data.AUTOTUNE)
+
+        if self.augment:
+            # apply data augmentation to training data
+            train_ds = train_ds.map(self.data_augmentation_map_multi_input, num_parallel_calls=tf.data.AUTOTUNE)
+
+        if self.model_arch in ['resnet-lstm', 'mobileNetV3Small-lstm']:
+            # scale each image and mask back to [0, 255]
+            train_ds = train_ds.map(lambda x, y: ((x[0] * 255.0, x[1] * 255.0), y), num_parallel_calls=tf.data.AUTOTUNE)
+            val_ds = val_ds.map(lambda x, y: ((x[0] * 255.0, x[1] * 255.0), y), num_parallel_calls=tf.data.AUTOTUNE)
+
+        if self.model_arch in ['inception-lstm', 'mobilenetV2-lstm']:
+            # scale only images from [0, 1] to [-1, 1]
+            train_ds = train_ds.map(lambda x, y: ((x[0] - 0.5) * 2.0, x[1], y), num_parallel_calls=tf.data.AUTOTUNE)
+            val_ds = val_ds.map(lambda x, y: ((x[0] - 0.5) * 2.0, x[1], y), num_parallel_calls=tf.data.AUTOTUNE)
 
 
         self.train_ds = train_ds.batch(self.batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)

@@ -67,8 +67,9 @@ def load_seg_model(seg_model_path, instance_size):
     return model
 
 def preprocess_img(img):
-    img = (img[..., None] / 255.0).astype(np.float32)
+    img = cv2.imread(img, cv2.IMREAD_GRAYSCALE)
     img = resize(img, output_shape=(256, 256), preserve_range=True, anti_aliasing=False)
+    img = (img[..., None]/255.0).astype(np.float32)
     img = np.expand_dims(img, axis=0)
     return img
 
@@ -104,8 +105,7 @@ def plot_seg_image(seg_model_path, img_path):
     seg_model = load_seg_model(seg_model_path, (256, 256, 1))
 
     img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    print(img.shape)
-    preprocessed_img = preprocess_img(img)
+    preprocessed_img = preprocess_img(img_path)
     pred = seg_model.predict(preprocessed_img)[0]  # (img_height, img_width, num_classes)
 
     mask = np.argmax(pred, axis=-1) # convert class probability map into single segmentation mask with index of highest probability
@@ -142,11 +142,12 @@ def plot_seg_image(seg_model_path, img_path):
 
     ax.axis('off')
     plt.tight_layout()
+    plt.show()
 
     # save image
-    fig_path = '/home/miaroe/workspace/lymph-node-classification/figures/'
-    os.makedirs(fig_path, exist_ok=True)
-    plt.savefig(fig_path + 'segmentation_masks.png', bbox_inches='tight')
+    #fig_path = '/home/miaroe/workspace/lymph-node-classification/figures/'
+    #os.makedirs(fig_path, exist_ok=True)
+    #plt.savefig(fig_path + 'segmentation_masks.png', bbox_inches='tight')
 
 
 #plot_seg_image('/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/segmentation-unet-20230614/','/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/baseline/Levanger_and_StOlavs/test/4L/208.png')

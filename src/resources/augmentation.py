@@ -95,6 +95,8 @@ class BrightnessTransform(layers.Layer):
 
     def call(self, data, **kwargs):
         #print('BrightnessTransform: ', self._random_scale)
+        if np.all(data == 0): #check if images are all zeros
+            return data
         return np.clip(data + self._random_scale, 0, 1)
 
 

@@ -282,7 +282,7 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         for i, layer in enumerate(base_model.layers):
             print(i, layer.name, layer.trainable)
 
-        sequence_input = Input(shape=(None, *instance_size), batch_size=1)  # (B, T, H, W, C)
+        sequence_input = Input(shape=(None, *instance_size))  # (B, T, H, W, C)
         x = TimeDistributed(base_model)(sequence_input)  # (B, T, H', W', C')
         x = TimeDistributed(tf.keras.layers.GlobalMaxPooling2D())(x)  # (B, T, C')
         x = LSTM(64, return_sequences=True, stateful=stateful)(x)  # (B, T, lstm_output_dim)
