@@ -3,6 +3,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import os
+from matplotlib.legend_handler import HandlerTuple
 
 from sklearn.metrics import ConfusionMatrixDisplay
 from sklearn.metrics import accuracy_score, precision_score, recall_score, classification_report, confusion_matrix
@@ -95,7 +96,22 @@ def create_box_plot():
 
     plt.figure(figsize=(18, 8))
     sns.set(style="whitegrid")
-    sns.boxplot(x='Station', y='Score', hue='Metric', data=combined_long, palette={'Clinician precision': '#8DD3C7', 'Clinician recall': '#AFA9DA'})
+    ax = sns.boxplot(x='Station', y='Score', hue='Metric', data=combined_long,
+                     palette={'Clinician precision': '#8DD3C7', 'Clinician recall': '#AFA9DA'}, boxprops={'alpha': 0.7}, showfliers=False)
+
+    # Add the data points used to create the boxplot as scatter points
+    sns.stripplot(x='Station', y='Score', hue='Metric', data=combined_long, dodge=True, jitter=True, size=7,
+                  linewidth=0.8, palette={'Clinician precision': '#8DD3C7', 'Clinician recall': '#AFA9DA'}, marker='o',
+                  ax=ax)
+
+    handles, labels = ax.get_legend_handles_labels()
+    leg = ax.legend(handles=[(handles[0], handles[2]), (handles[1], handles[3])],
+              labels=['Clinician precision', 'Clinician recall'],
+              loc='upper right', handlelength=4, fontsize=18,
+              handler_map={tuple: HandlerTuple(ndivide=None)})
+
+    for lh in leg.legendHandles:
+        lh.set_edgecolor('k')
 
     # Add the CNN values from the values_long to the plot as points, centered on the boxes
     #sns.stripplot(x='Station', y='Score', hue='Metric', data=values_long, dodge=True, jitter=False, size=10, linewidth=2, palette={'CNN precision': '#fb8072', 'CNN recall': '#bebada'})
@@ -107,15 +123,10 @@ def create_box_plot():
     # Increase the fontsizes
     plt.xticks(fontsize=18)
     plt.yticks(fontsize=18)
-    plt.legend(fontsize=18)
 
     # change y-axis to percentage
     plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter(1))
 
-    # add black line around legend handles and labels
-    leg = plt.legend(loc='upper right', fontsize=18)
-    for lh in leg.legendHandles:
-        lh.set_edgecolor('k')
 
     fig_path = '/home/miaroe/workspace/lymph-node-classification/figures/'
     os.makedirs(fig_path, exist_ok=True)

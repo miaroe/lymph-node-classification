@@ -15,7 +15,7 @@ def load_image(image_path):
     img = tf.io.read_file(image_path)
     img = tf.image.decode_png(img, channels=3)
     img = tf.cast(img, tf.float32)
-    img = tf.image.resize(img, [256, 256])
+    img = tf.image.resize(img, [256, 256], method='nearest')
     img = img / 255.0  # Normalize the image to [0, 1]
     return img
 

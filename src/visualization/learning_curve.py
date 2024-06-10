@@ -27,6 +27,8 @@ def plot_learning_curve(model_path, reports_path):
     # Add axes labels
     plt.xlabel('Epochs', fontsize=20)
     plt.ylabel('Loss', fontsize=20)
+    plt.ylim(0, 5)
+    plt.xlim(0, 60)
 
     # Set the ticks
     ax.set_xticks(range(0, len(train_loss), 10))
@@ -40,4 +42,4 @@ def plot_learning_curve(model_path, reports_path):
     os.makedirs(fig_path, exist_ok=True)
     plt.savefig(fig_path + 'learning_curve.png', dpi=300, bbox_inches='tight')
 
-#plot_learning_curve('/home/miaroe/workspace/lymph-node-classification/output/models/2023-11-20/16:36:26/', '/home/miaroe/workspace/lymph-node-classification/reports/2023-11-20/16:36:26/')
+plot_learning_curve('/home/miaroe/workspace/lymph-node-classification/output/models/2024-04-14/19:19:00/', '/home/miaroe/workspace/lymph-node-classification/reports/2024-04-14/19:19:00/')

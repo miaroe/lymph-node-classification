@@ -18,7 +18,7 @@ def confusion_matrix_and_report(true_labels, predictions, num_stations, stations
     plt.figure(figsize=(10, 10))
     plt.grid(False)
 
-    cm = confusion_matrix(true_labels, predictions)
+    cm = confusion_matrix(true_labels, predictions, labels=range(num_stations))
     disp = ConfusionMatrixDisplay(confusion_matrix=cm,
                                   display_labels=list(stations_config.keys()))
 
@@ -35,7 +35,8 @@ def confusion_matrix_and_report(true_labels, predictions, num_stations, stations
                                    digits=3,
                                    labels=range(num_stations),
                                    target_names=list(stations_config.keys()),
-                                   output_dict=True)
+                                   output_dict=True,
+                                   zero_division=0)
     # save report to csv
     df = pd.DataFrame(report).transpose()
     os.makedirs(reports_path, exist_ok=True)
