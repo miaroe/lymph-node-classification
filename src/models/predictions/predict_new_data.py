@@ -12,52 +12,6 @@ from src.visualization.confusion_matrix import confusion_matrix_and_report
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 from src.resources.train_config import get_config
 from src.utils.get_paths import get_frame_paths, get_test_station_paths
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.layers import Input, Dense, Conv2D, MaxPooling2D, Dropout, Flatten, SpatialDropout2D, \
-    ZeroPadding2D, Activation, AveragePooling2D, UpSampling2D, BatchNormalization, ConvLSTM2D, \
-    TimeDistributed, Concatenate, Lambda, Reshape, LSTM, GlobalMaxPooling2D, GlobalAveragePooling2D
-from tensorflow.keras.models import Model, Sequential
-
-
-def create_model(instance_size, num_stations, stateful):
-    # Create the base model from the pre-trained model
-    base_model = MobileNetV2(include_top=False, weights="imagenet", input_shape=instance_size, pooling=None)
-
-    for layer in base_model.layers[:-11]:
-        layer.trainable = False
-
-    # Make sure the correct layers are frozen
-    for i, layer in enumerate(base_model.layers):
-        print(i, layer.name, layer.trainable)
-
-    # Create the input layer for the sequence of images
-    sequence_input = Input(shape=(None, *instance_size))  # (B, T, H, W, C)
-
-    # Apply the CNN base model to each image in the sequence
-    x = TimeDistributed(base_model)(sequence_input)  # (B, T, H', W', C')
-
-    # Apply Global Average Pooling to each frame in the sequence
-    x = TimeDistributed(tf.keras.layers.GlobalMaxPooling2D())(x)  # (B, T, C')
-
-    # Create an LSTM layer
-    x = LSTM(64, return_sequences=True, stateful=stateful)(x)  # (B, T, lstm_output_dim)
-
-    x = LSTM(64, return_sequences=False, stateful=stateful)(x)  # (B, lstm_output_dim)
-
-    # Create a dense layer
-    # x = Dense(32, kernel_regularizer=regularizers.l2(0.001), activation='relu')(x)  # (B, dense_output_dim)
-    x = Dense(256, activation='relu')(x)  # (B, dense_output_dim)
-
-    # Create a dropout layer
-    x = Dropout(0.5)(x)  # (B, dense_output_dim)
-
-    # Create the output layer for classification
-    output = Dense(num_stations, activation='softmax')(x)  # (B, num_classes)
-
-    # Create the combined model
-    model = Model(inputs=sequence_input, outputs=output)
-
-    return model
 
 # Used to create a test dataset using data from Ålesund, needs to be cropped differently
 
@@ -70,15 +24,15 @@ def get_label_one_hot(station_folder, stations_config, num_stations):
 
 def get_path_labels(paths, stations_config, num_stations):
     labels = [path.split('/')[-1] for path in paths]
-    labels = [label.split('_')[1] for label in labels] # split Station_11L_001 to 11L
     return [get_label_one_hot(label, stations_config, num_stations) for label in labels]
 
 def preprocess_frames(image_path):
-    frame = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    frame = frame[150:875, 500:1370]
+    frame = tf.keras.utils.load_img(image_path, color_mode='rgb', target_size=None)
+    frame = np.array(frame)
+    frame = frame[105:635, 585:1335]
     frame = tf.cast(frame, tf.float32)
-    frame = tf.image.resize(frame, [224, 224])
-    frame = (frame - 127.5) / 127.5
+    frame = tf.image.resize(frame, [224, 224], method='nearest')
+    frame = frame / 127.5 - 1
     return frame
 
 def load_image_sequence(frame_paths, seq_length):
@@ -106,6 +60,33 @@ def create_sequences_test(station_path, seq_length, convert_from_tensor):
     sequences = [load_image_sequence(sequence, seq_length) for sequence in sequence_paths]
     return sequences
 
+def predict_sequence(model_path, model_name, test_path, seq_length):
+    model = tf.keras.models.load_model(os.path.join(model_path, model_name))
+    sequence_predictions = []
+    true_labels = []
+    for patient in os.listdir(test_path):
+        patient_path = os.path.join(test_path, patient)
+        print('patient_path:', patient_path)
+        for station in os.listdir(patient_path):
+            station_path = os.path.join(patient_path, station)
+            frame_paths = get_frame_paths(station_path, 'sequence')
+            num_frames = len(frame_paths)
+            sequences = [frame_paths[i: i + seq_length] for i in range(0, num_frames, seq_length)]
+            for sequence in sequences:
+                loaded_sequence = load_image_sequence(sequence, seq_length)
+                prediction = get_predictions(loaded_sequence, model).tolist()
+                sequence_predictions.append(np.argmax(prediction))
+                true_labels.append(get_stations_config(3)[station.split('_')[1]])
+
+    print('sequence_predictions:', sequence_predictions)
+    print('true_labels:', true_labels)
+    print('accuracy:', accuracy_score(true_labels, sequence_predictions))
+    return sequence_predictions, true_labels
+
+#predict_sequence(model_path='/home/miaroe/workspace/lymph-node-classification/output/models/2024-04-19/22:44:29',
+#                 model_name='best_model', test_path='/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Aalesund',
+#                 seq_length=10)
+
 
 # evaluate sequence model per sequence
 def evaluate_sequence_model_per_seq(model_path, reports_path, seq_length, stations_config_nr, batch_size):
@@ -114,7 +95,7 @@ def evaluate_sequence_model_per_seq(model_path, reports_path, seq_length, statio
     test_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Aalesund'
     stations_config = get_stations_config(stations_config_nr)
     num_stations = get_num_stations(stations_config_nr)
-    test_station_paths = get_test_station_paths(test_path)
+    test_station_paths = get_test_station_paths(test_path, 'sequence')
 
     sequences_list = []
     labels_list = []
@@ -137,7 +118,7 @@ def evaluate_sequence_model_per_seq(model_path, reports_path, seq_length, statio
         print('min:', tf.reduce_min(images))
         print('max:', tf.reduce_max(images))
     num_images = 0
-
+    
     for i, (images, labels) in enumerate(test_ds.take(3)):
         print('images shape: ', images.shape)  # (1, seq_length, 256, 256, 3)
         print('labels shape: ', labels.shape)  # (1, 8)
@@ -159,12 +140,13 @@ def evaluate_sequence_model_per_seq(model_path, reports_path, seq_length, statio
             plt.show()
     print(f"Total images: {num_images}")
 
+
     config_path = os.path.join(model_path, 'config.json')
     config = get_config(config_path)
     train_config = config["train_config"]
 
     model = get_arch(train_config.get('model_arch'), train_config.get('instance_size'),
-                     train_config.get('num_stations'), stateful=False)
+                     train_config.get('num_stations'), stateful=False) # not stateful here, batches are shuffled
     model.compile(loss=get_loss(train_config.get('loss')), optimizer='adam',
                   metrics=['accuracy', Precision(), Recall()])
     model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_partial()
@@ -197,21 +179,85 @@ def evaluate_sequence_model_per_seq(model_path, reports_path, seq_length, statio
     print('precision:', precision_score(true_labels, pred_labels, average='weighted'))
     print('recall:', recall_score(true_labels, pred_labels, average='weighted'))
 
-    #confusion_matrix_and_report(true_labels, pred_labels, num_stations,
-    #                            train_config.get('stations_config'),
-    #                            reports_path, 'sequence_test_')
+    confusion_matrix_and_report(true_labels, pred_labels, num_stations,
+                                train_config.get('stations_config'),
+                                reports_path, 'sequence_test_Aalesund')
 
 
-evaluate_sequence_model_per_seq(model_path='/home/miaroe/workspace/lymph-node-classification/output/models/2024-04-19/22:44:29',
-                         reports_path='/home/miaroe/workspace/lymph-node-classification/reports/2024-04-19/22:44:29/',
-                         seq_length=10, stations_config_nr=3, batch_size=1)
+#evaluate_sequence_model_per_seq(model_path='/home/miaroe/workspace/lymph-node-classification/output/models/2024-05-09/12:07:18',
+#                         reports_path='/home/miaroe/workspace/lymph-node-classification/reports/2024-05-09/12:07:18/',
+#                         seq_length=10, stations_config_nr=3, batch_size=1)
 
+
+
+'''
+/home/miaroe/workspace/lymph-node-classification/output/models/2024-03-03/22:33:14
+accuracy: 0.39344262295081966
+precision: 0.5774274905422446
+recall: 0.39344262295081966
+
+/home/miaroe/workspace/lymph-node-classification/output/models/2024-05-02/16:08:35
+accuracy: 0.32786885245901637
+precision: 0.5446899501069138
+recall: 0.32786885245901637
+
+/home/miaroe/workspace/lymph-node-classification/output/models/2024-05-05/21:10:47
+accuracy: 0.19672131147540983
+precision: 0.30700447093889716
+recall: 0.19672131147540983
+
+/home/miaroe/workspace/lymph-node-classification/output/models/2024-05-05/21:11:14
+accuracy: 0.29508196721311475
+precision: 0.4458756180067655
+recall: 0.29508196721311475
+'''
 
 # plot image
-#image_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Aalesund/20240419-102838/Station_11L_001/frame_0.png'
-#image = cv2.imread(image_path)
-#image = image[150:875, 500:1370] #[y1:y2, x1:x2]
-#image = image[140:850, 440:1440]
-#plt.imshow(image)
-#plt.show()
 
+#image_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Aalesund/Patient_20240419-102838/4L/frame_1314.png'
+image_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/FullVideos/EBUS_StOlavs_full_videos/Patient_20240502-084504/Sequence_001/frame_2349.png'
+#image_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger_and_StOlavs/test/EBUS_Levanger_Patient_022/4L/frame_1693.png'
+#image_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/FullVideos/EBUS_StOlavs_full_videos/Patient_001/Sequence_001/frame_2083.png'
+image = tf.keras.utils.load_img(image_path, color_mode='rgb', target_size=(1080, 2040)) # (height, width) 2048x1080
+image = np.array(image)
+image = image[100:1035, 510:1845]  #[y1:y2, x1:x2]
+#image = image[100:1035, 530:1658]
+print('image shape:', image.shape)
+#image = image[150:775, 450:1430] 625 845 1.352
+image = tf.cast(image, tf.float32)
+image = tf.image.resize(image, [224, 224], method='nearest')
+
+#image = cv2.imread(image_path)
+#image = cv2.resize(image, (1280, 1024))
+#print('image shape:', image.shape)
+
+#fig = plt.figure(figsize=(image.shape[1] / 100, image.shape[0] / 100), dpi=100)
+
+plt.imshow(image.numpy().astype("uint8"))
+plt.show()
+
+
+
+
+
+
+
+# [105:635, 585:1335] accuracy: 0.3220338983050847, precision: 0.5832819722650231, recall: 0.3220338983050847 (using tf.keras.utils.load_img)
+
+
+# with the whole US sector: [110:725, 515:1400] accuracy: 0.0847457627118644, precision: 0.2919020715630885, recall: 0.0847457627118644
+# cropped like training dataset using lines: [110:670, 600:1320] accuracy: 0.2033898305084746, precision: 0.4133239171374765, recall: 0.2033898305084746
+# cropped like training dataset manually: [110:630, 580:1330] accuracy: 0.2711864406779661, precision: 0.5067124024751143, recall: 0.2711864406779661
+# cropped like training dataset manually: [100:630, 580:1330] accuracy: 0.288135593220339, precision: 0.6246973365617433, recall: 0.288135593220339
+
+# [100:630, 580:1330] accuracy: 0.288135593220339, precision: 0.6246973365617433, recall: 0.288135593220339
+# [90:620, 580:1330] accuracy: 0.2033898305084746, precision: 0.5414043583535109, recall: 0.2033898305084746
+# [110:650, 580:1330] accuracy: 0.23728813559322035, precision: 0.4309430682312039, recall: 0.23728813559322035
+# [100:630, 570:1340] accuracy: 0.2711864406779661, precision: 0.5883777239709443, recall: 0.2711864406779661
+# [100:630, 590:1320] accuracy: 0.2542372881355932, precision: 0.575991804805364, recall: 0.2542372881355932
+# [100:630, 600:1310] accuracy: 0.288135593220339, precision: 0.622547508988187, recall: 0.288135593220339
+# [120:600, 580:1330] accuracy: 0.2711864406779661, precision: 0.5654358353510895, recall: 0.2711864406779661
+# [90:640, 580:1330] accuracy: 0.22033898305084745, precision: 0.5677966101694916, recall: 0.22033898305084745
+# [100:630, 570:1340] accuracy: 0.2711864406779661, precision: 0.5883777239709443, recall: 0.2711864406779661
+# [95:625, 575:1325] accuracy: 0.23728813559322035, precision: 0.5609879762422135, recall: 0.23728813559322035
+# [105:635, 585:1335] accuracy: 0.3050847457627119, precision: 0.5440677966101695, recall: 0.3050847457627119
