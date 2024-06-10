@@ -1,5 +1,6 @@
 .idea
 .DS_Store
+.gitignore
 
 # Environments
 venv/
@@ -11,6 +12,4 @@ environment/
 *.json
 
 # Folders
-output/
-data/
-html_visuals/
+\figures

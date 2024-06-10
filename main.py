@@ -13,6 +13,7 @@ def main():
     tf.random.set_seed(42)
 
     if model_type == 'sequence_with_segmentation' and perform_segmentation:
+        print('Creating segmentation masks')
         create_seg_masks(old_data_path=old_data_path,
                          data_path=data_path,
                          seg_model_path=seg_model_path

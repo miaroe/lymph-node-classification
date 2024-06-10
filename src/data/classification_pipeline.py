@@ -160,11 +160,11 @@ class Baseline(ClassificationPipeline):
             ds = ds.map(self.data_augmentation_map, num_parallel_calls=AUTOTUNE)
             ds = ds.batch(self.batch_size)
 
-        if self.model_arch == 'resnet' or self.model_arch == 'vgg16' or self.model_arch == 'mobilenetV3Small':
+        if self.model_arch in ['resnet', 'vgg16', 'mobilenetV3Small']:
             # scale to [0, 255]
             ds = ds.map(lambda x, y: (x * 255., y), num_parallel_calls=AUTOTUNE)
 
-        elif self.model_arch == 'inception' or self.model_arch == 'mobilenetV2':
+        elif self.model_arch in ['inception', 'mobilenetV2']:
             # scale to [-1, 1]
             ds = ds.map(lambda x, y: (x * 2. - 1., y), num_parallel_calls=AUTOTUNE)
 
@@ -241,7 +241,7 @@ class Baseline(ClassificationPipeline):
     def load_image_tf(self, image_path):
         img = tf.io.read_file(image_path)
         img = tf.image.decode_png(img, channels=3)
-        img = tf.image.resize(img, self.image_shape)
+        img = tf.image.resize(img, self.image_shape, method='nearest')
         img = tf.cast(img, tf.float32) / 255.0
         return img
 
@@ -254,13 +254,13 @@ class Baseline(ClassificationPipeline):
         if augment:
             ds = ds.map(self.data_augmentation_map_with_quality, num_parallel_calls=AUTOTUNE)
 
-        if self.model_arch == 'resnet' or self.model_arch == 'vgg16' or self.model_arch == 'mobilenetV3Small':
+        if self.model_arch in ['resnet', 'vgg16', 'mobilenetV3Small']:
             # scale to [0, 255]
-            ds = ds.map(lambda x, y: (x * 255., y), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x, y, z: (x * 255., y, z), num_parallel_calls=AUTOTUNE)
 
-        elif self.model_arch == 'inception' or self.model_arch == 'mobilenetV2':
+        elif self.model_arch in ['inception', 'mobilenetV2']:
             # scale to [-1, 1]
-            ds = ds.map(lambda x, y: (x * 2. - 1., y), num_parallel_calls=AUTOTUNE)
+            ds = ds.map(lambda x, y, z: (x * 2. - 1., y, z), num_parallel_calls=AUTOTUNE)
 
         ds = ds.batch(self.batch_size).prefetch(buffer_size=AUTOTUNE)
         return ds
@@ -277,8 +277,7 @@ class Sequence(ClassificationPipeline):
         self.instance_size = instance_size
         self.full_video = full_video
         self.use_gen = use_gen
-        self.train_paths, self.val_paths = get_training_station_paths(self.data_path)
-        self.train_quality, self.val_quality = get_quality_dataframes(self.data_path, test=False)
+        self.train_paths, self.val_paths = get_training_station_paths(self.data_path, self.model_type)
 
 
     def get_path_labels(self, paths):
@@ -318,7 +317,7 @@ class Sequence(ClassificationPipeline):
         def _load_image():
             img = tf.io.read_file(image_path)
             img = tf.image.decode_png(img, channels=3)
-            img = tf.image.resize(img, self.image_shape)
+            img = tf.image.resize(img, self.image_shape, method='nearest')
             img = img / 255.0  # Normalize the image to be in range [0, 1]
             return img
 
@@ -492,6 +491,7 @@ class Sequence(ClassificationPipeline):
         return self.train_ds, self.val_ds
 
     def loader_function_with_quality(self):
+        self.train_quality, self.val_quality = get_quality_dataframes(self.data_path, test=False)
         train_ds = tf.data.Dataset.from_tensor_slices((self.train_paths, self.get_path_labels(self.train_paths), tf.ones(len(self.train_paths))))
         val_ds = tf.data.Dataset.from_tensor_slices((self.val_paths, self.get_path_labels(self.val_paths), tf.ones(len(self.val_paths))))
 
@@ -549,7 +549,7 @@ class SequenceWithSegmentation(ClassificationPipeline):
         self.train_paths, self.val_paths = self.get_training_paths()
 
     def get_training_paths(self):
-        return get_training_station_paths(self.data_path)
+        return get_training_station_paths(self.data_path, self.model_type)
 
     def get_path_labels(self, paths):
         labels = [path.split('/')[-1] for path in paths]
@@ -561,6 +561,10 @@ class SequenceWithSegmentation(ClassificationPipeline):
         with h5py.File(image_path, 'r') as file:
             image = file['image'][:]
             mask = file['mask'][:]
+
+            # resize to 224x224
+            image = tf.image.resize(image, [224, 224], method='nearest')
+            mask = tf.image.resize(mask, [224, 224], method='nearest')
 
             image = np.repeat(image, 3, axis=-1) # repeat grayscale image to create 3 channels
             return image, mask
@@ -636,15 +640,15 @@ class SequenceWithSegmentation(ClassificationPipeline):
             # apply data augmentation to training data
             train_ds = train_ds.map(self.data_augmentation_map_multi_input, num_parallel_calls=tf.data.AUTOTUNE)
 
-        if self.model_arch in ['resnet-lstm', 'mobileNetV3Small-lstm']:
-            # scale each image and mask back to [0, 255]
-            train_ds = train_ds.map(lambda x, y: ((x[0] * 255.0, x[1] * 255.0), y), num_parallel_calls=tf.data.AUTOTUNE)
-            val_ds = val_ds.map(lambda x, y: ((x[0] * 255.0, x[1] * 255.0), y), num_parallel_calls=tf.data.AUTOTUNE)
+        if self.model_arch in ['mutli-input_mobileNetV3Small-lstm']:
+            # scale only images back to [0, 255]
+            train_ds = train_ds.map(lambda x, y: ((x[0] * 255.0, x[1]), y), num_parallel_calls=tf.data.AUTOTUNE)
+            val_ds = val_ds.map(lambda x, y: ((x[0] * 255.0, x[1]), y), num_parallel_calls=tf.data.AUTOTUNE)
 
-        if self.model_arch in ['inception-lstm', 'mobilenetV2-lstm']:
+        if self.model_arch in ['mutli-input_mobilenetV2-lstm']:
             # scale only images from [0, 1] to [-1, 1]
-            train_ds = train_ds.map(lambda x, y: ((x[0] - 0.5) * 2.0, x[1], y), num_parallel_calls=tf.data.AUTOTUNE)
-            val_ds = val_ds.map(lambda x, y: ((x[0] - 0.5) * 2.0, x[1], y), num_parallel_calls=tf.data.AUTOTUNE)
+            train_ds = train_ds.map(lambda x, y: (((x[0] - 0.5) * 2.0, x[1]), y), num_parallel_calls=tf.data.AUTOTUNE)
+            val_ds = val_ds.map(lambda x, y: (((x[0] - 0.5) * 2.0, x[1]), y), num_parallel_calls=tf.data.AUTOTUNE)
 
 
         self.train_ds = train_ds.batch(self.batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)

@@ -201,7 +201,7 @@ def copy_station(src_dir, dst_dir, label, start, end, struct_type, frame_number_
 
     if os.path.isdir(src_dir):
         # rename file names and copy to new directory
-        for i in range(start, end):
+        for i in range(start, end + 1):
             frame = 'frame_' + str(i) + '.png'
             src = os.path.join(src_dir, frame)
 
@@ -281,10 +281,13 @@ def create_new_datastructure_from_df(struct_type, df, dir, dirname_quality_map, 
 def crop_image(filename, folder_path):
     print("Cropping: ", filename)
     if filename.endswith(".png"):
-        image_path = os.path.join(folder_path, filename)
-        image = cv2.imread(image_path)
-        image = image[100:1035, 530:1658]
-        cv2.imwrite(image_path, image)
+        try:
+            image_path = os.path.join(folder_path, filename)
+            image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+            image = image[100:1035, 530:1658]
+            cv2.imwrite(image_path, image)
+        except:
+            print("Error: ", image_path)
         print("Cropped: ", image_path)
 
 
@@ -354,5 +357,13 @@ def create_EBUS_data(struct_type):
     crop_all_images_in_path(val_dir, struct_type)
     crop_all_images_in_path(test_dir, struct_type)
 
-create_EBUS_data('sequence')
+#create_EBUS_data('baseline')
+
+
+def create_EBUS_Aalesund():
+    data_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/EBUS_Aalesund'
+    dirname_label_df = get_dirname_label_map_full_video()
+    create_new_datastructure_from_df('sequence', dirname_label_df, data_path, get_dirname_good_quality_frame_map())
+
+#create_EBUS_Aalesund()
 
