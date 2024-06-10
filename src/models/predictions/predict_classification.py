@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from tensorflow.keras.metrics import Precision, Recall
-import cv2
+import h5py
 
 from src.resources.architectures.ml_models import get_arch
 from src.resources.config import get_stations_config, get_num_stations
@@ -17,18 +17,12 @@ from src.resources.train_config import get_config
 from src.utils.get_paths import get_frame_paths, get_test_station_paths
 
 dirname_test_df = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger_and_StOlavs/test_dirname_label_df.csv'
-model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2024-04-17/21:37:47'
-reports_path = '/home/miaroe/workspace/lymph-node-classification/reports/2024-04-17/21:37:47/'
+model_path = '/home/miaroe/workspace/lymph-node-classification/output/models/2024-06-01/19:51:30'
+reports_path = '/home/miaroe/workspace/lymph-node-classification/reports/2024-06-04/21:28:00/'
 model_name = 'best_model'
 test_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger_and_StOlavs/test'
+data_path_cv = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence_cv'
 stations_config_nr = 3
-
-# local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/EBUS_Levanger_full_videos/Patient_036/Sequence_001'
-local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/baseline/Levanger_and_StOlavs/test/full_video'
-#local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/EBUS_StOlavs_baseline_test/full_video'
-#local_full_video_path = '/Users/miarodde/Documents/sintef/ebus-ai/Patient_036/full_video'
-local_model_path = '/Users/miarodde/Documents/sintef/ebus-ai/videos_in_FAST/models/'
-local_model_name = 'best_model'
 
 #------------------ Helper functions ------------------#
 
@@ -53,7 +47,7 @@ def rescale_image(image):
 def preprocess_image(image):
     image = tf.cast(image, tf.float32)
     image = image[100:1035, 530:1658]
-    image = tf.image.resize(image, [256, 256])
+    image = tf.image.resize(image, [256, 256], method='nearest')
     image = image / 255.0
     return image
 
@@ -163,28 +157,6 @@ def predict_classification_per_station(dirname_test_df, model_path, model_name, 
 
 #predict_classification_per_station(dirname_test_df, model_path, model_name, labels=list(get_stations_config(stations_config_nr).keys()))
 
-def compare_predictions_to_labels(model_path):
-    station_predictions_df = pd.read_csv(os.path.join(model_path, 'station_predictions.csv'), sep=',')
-    num_incorrect = 0
-    num_total = 0
-    for index, row in station_predictions_df.iterrows():
-        if row['station'] != row['prediction_station']:
-            num_incorrect += 1
-            print('station:', row['station'])
-            print('prediction_station:', row['prediction_station'])
-            print('patient_id:', row['patient_id'])
-            print('dirname:', row['dirname'])
-            print('prediction_value:', row['prediction_value'])
-            print('prediction_values_arr:', row['prediction_values_arr'])
-            print('----------------')
-        num_total += 1
-
-    print('num_incorrect:', num_incorrect)
-    print('num_total:', num_total)
-    print('accuracy:', (1 - num_incorrect / num_total) * 100, '%')
-
-#compare_predictions_to_labels(model_path)
-
 
 # ------------------ Sequence ------------------#
 
@@ -199,11 +171,9 @@ def get_path_labels(paths, stations_config, num_stations):
     return [get_label_one_hot(label, stations_config, num_stations) for label in labels]
 
 def preprocess_frames(image_path):
-    #frame = tf.keras.utils.load_img(image_path, color_mode='rgb', target_size=(224, 224))
-    frame = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    frame = tf.keras.utils.load_img(image_path, color_mode='rgb', target_size=(224, 224))
     frame = tf.cast(frame, tf.float32)
     frame = frame / 127.5 - 1
-    frame = tf.image.resize(frame, [224, 224])
     #frame = frame / 255.0
     return frame
 
@@ -211,11 +181,40 @@ def load_image_sequence(frame_paths, seq_length):
     sequence = [preprocess_frames(frame_path) for frame_path in frame_paths]
     if len(sequence) != seq_length:
         # add zero padding to make the total equal seq_length
-        zero_frame = tf.zeros_like(sequence[-1], dtype=tf.float32)
+        zero_frame = np.zeros_like(sequence[-1], dtype=np.float32)
         num_repeats = seq_length - len(frame_paths)
         sequence = sequence + ([zero_frame] * num_repeats)
     sequence = tf.stack(sequence)
     return sequence
+
+def load_masked_image_multi_input(image_path):
+    with h5py.File(image_path, 'r') as file:
+        image = file['image'][:]
+        mask = file['mask'][:]
+
+        # resize to 224x224
+        image = tf.image.resize(image, [224, 224], method='nearest')
+        mask = tf.image.resize(mask, [224, 224], method='nearest')
+
+        image = np.repeat(image, 3, axis=-1) # repeat grayscale image to create 3 channels
+        return image, mask
+
+def load_image_sequence_multi_input(frame_paths, seq_length):
+    images_sequence = []
+    masks_sequence = []
+    for frame_path in frame_paths:
+        image, mask = load_masked_image_multi_input(frame_path)
+        images_sequence.append(image)
+        masks_sequence.append(mask)
+
+    # Ensure sequences are padded to the desired length
+    while len(images_sequence) < seq_length:
+        images_sequence.append(np.zeros((224, 224, 3), dtype=np.float32))
+        masks_sequence.append(np.zeros((224, 224, 3), dtype=np.float32))
+
+    images_sequence = tf.stack(images_sequence)
+    masks_sequence = tf.stack(masks_sequence)
+    return images_sequence, masks_sequence
 
 def get_predictions(sequence, model):
     sequence = np.array(sequence)  # Convert list to np.array
@@ -231,6 +230,21 @@ def create_sequences_test(station_path, seq_length, convert_from_tensor):
     sequence_paths = [frame_paths[i: i + seq_length] for i in range(0, num_frames, seq_length)]
     sequences = [load_image_sequence(sequence, seq_length) for sequence in sequence_paths]
     return sequences
+
+def create_sequences_test_multi_input(station_path, seq_length, convert_from_tensor):
+    if convert_from_tensor:
+        station_path = station_path.numpy().decode('utf-8')
+    print('station_path:', station_path)
+    frame_paths = get_frame_paths(station_path, 'sequence_with_segmentation')  # gets frame paths for one station
+    num_frames = len(frame_paths)
+    sequence_paths = [frame_paths[i: i + seq_length] for i in range(0, num_frames, seq_length)]
+    image_sequences = []
+    mask_sequences = []
+    for sequence in sequence_paths:
+        images, masks = load_image_sequence_multi_input(sequence, seq_length)
+        image_sequences.append(images)
+        mask_sequences.append(masks)
+    return image_sequences, mask_sequences
 
 def predict_sequence(model_path, model_name, test_path, seq_length):
     model = tf.keras.models.load_model(os.path.join(model_path, model_name))
@@ -263,7 +277,7 @@ def evaluate_sequence_model(model_path, reports_path, seq_length, stations_confi
     test_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger_and_StOlavs/test'
     stations_config = get_stations_config(stations_config_nr)
     num_stations = get_num_stations(stations_config_nr)
-    test_paths = get_test_station_paths(test_path)
+    test_paths = get_test_station_paths(test_path, 'sequence')
     print('num test paths:', len(test_paths))
     test_ds = tf.data.Dataset.from_tensor_slices((test_paths, get_path_labels(test_paths, stations_config, num_stations)))
     test_ds = test_ds.map(lambda x, y: (tf.py_function(func=create_sequences_test, inp=[x, seq_length, True], Tout=tf.float32), y))
@@ -348,7 +362,7 @@ def evaluate_sequence_model_per_seq(model_path, reports_path, seq_length, statio
     test_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence/Levanger_and_StOlavs/test'
     stations_config = get_stations_config(stations_config_nr)
     num_stations = get_num_stations(stations_config_nr)
-    test_station_paths = get_test_station_paths(test_path)
+    test_station_paths = get_test_station_paths(test_path, 'sequence')
 
     sequences_list = []
     labels_list = []
@@ -369,6 +383,97 @@ def evaluate_sequence_model_per_seq(model_path, reports_path, seq_length, statio
         print('images shape: ', images.shape)  # (batch_size, seq_length, 224, 224, 3)
         print('min:', tf.reduce_min(images))
         print('max:', tf.reduce_max(images))
+
+    config_path = os.path.join(model_path, 'config.json')
+    config = get_config(config_path)
+    train_config = config["train_config"]
+
+    model = get_arch(train_config.get('model_arch'), train_config.get('instance_size'),
+                     train_config.get('num_stations'), stateful=False)
+    model.compile(loss=get_loss(train_config.get('loss')), optimizer='adam',
+                  metrics=['accuracy', Precision(), Recall()])
+    model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_partial()
+
+    score_test = model.evaluate(test_ds, return_dict=True, steps=None)
+    os.makedirs(reports_path, exist_ok=True)
+    if not os.path.exists(os.path.join(reports_path, 'test_metrics.txt')):
+        with open(os.path.join(reports_path, 'test_metrics.txt'), 'w') as f:
+            f.write('Test metrics\n')
+    with open(os.path.join(reports_path, 'test_metrics.txt'), 'a') as f:
+        f.write(f'\n\nTest metrics for model: {model_path}\n')
+        f.write(f'{"Metric":<12}{"Value"}\n')
+        for metric, value in score_test.items():
+            f.write(f'{metric:<12}{value:<.4f}\n')
+
+    #debug
+    # Initialize the true labels and predicted labels arrays
+    true_labels = []
+    pred_labels = []
+
+    for batch in test_ds:
+        images, labels = batch  # shape=(4, seq_length, 224, 224, 3)
+        pred_probs = model.predict(images)
+        batch_pred_label = np.argmax(pred_probs, axis=1)
+        true_label = np.argmax(labels, axis=1)
+        true_labels.extend(true_label)
+        pred_labels.extend(batch_pred_label)
+
+    print('true_labels:', true_labels)
+    print('pred_labels:', pred_labels)
+    print('accuracy:', accuracy_score(true_labels, pred_labels))
+
+    confusion_matrix_and_report(true_labels, pred_labels, num_stations,
+                                train_config.get('stations_config'),
+                                reports_path, 'sequence_test_')
+
+
+#evaluate_sequence_model_per_seq(model_path='/home/miaroe/workspace/lymph-node-classification/output/models/2024-05-09/12:07:18',
+#                         reports_path='/home/miaroe/workspace/lymph-node-classification/reports/2024-05-09/12:07:18/',
+#                         seq_length=10, stations_config_nr=3, batch_size=1)
+
+
+# evaluate multi input model per sequence
+def evaluate_multi_input_model_per_seq(model_path, reports_path, seq_length, stations_config_nr, batch_size):
+    print("Evaluating model: " + model_path)
+
+    test_path = '/mnt/EncryptedData1/LungNavigation/EBUS/ultrasound/sequence_segmentation/Levanger_and_StOlavs/test'
+    stations_config = get_stations_config(stations_config_nr)
+    num_stations = get_num_stations(stations_config_nr)
+    test_station_paths = get_test_station_paths(test_path, 'sequence')
+
+    image_sequences_list = []
+    mask_sequences_list = []
+    labels_list = []
+    for station_path in test_station_paths:
+        image_sequences, mask_sequences = create_sequences_test_multi_input(station_path, seq_length, False)
+        print('image_sequences:', len(image_sequences))
+        print('mask_sequences:', len(mask_sequences))
+        labels = get_path_labels([station_path] * len(image_sequences), stations_config, num_stations)
+        labels_list.extend(labels)
+        image_sequences_list.extend(image_sequences)
+        mask_sequences_list.extend(mask_sequences)
+
+
+    print('num sequences:', len(image_sequences_list))
+    print('num labels:', len(labels_list))
+
+    test_ds = tf.data.Dataset.from_tensor_slices(((image_sequences_list, mask_sequences_list), labels_list))
+
+    test_ds = test_ds.map(lambda x, y: (((x[0] - 0.5) * 2.0, x[1]), y), num_parallel_calls=tf.data.AUTOTUNE)
+
+    test_ds = test_ds.batch(batch_size)
+
+    for data in test_ds.take(1):
+        images, labels = data
+
+        # images is first channel and masks is second and third channel
+        image_input = images[0]
+        mask_input = images[1]
+
+        print('image_input shape:', image_input.shape)
+        print('mask_input shape:', mask_input.shape)
+        print('labels shape:', labels.shape)
+
 
     config_path = os.path.join(model_path, 'config.json')
     config = get_config(config_path)
@@ -407,172 +512,107 @@ def evaluate_sequence_model_per_seq(model_path, reports_path, seq_length, statio
                                 reports_path, 'sequence_test_')
 
 
-evaluate_sequence_model_per_seq(model_path='/home/miaroe/workspace/lymph-node-classification/output/models/2024-04-29/08:58:52',
-                         reports_path='/home/miaroe/workspace/lymph-node-classification/reports/2024-04-29/08:58:52/',
-                         seq_length=10, stations_config_nr=3, batch_size=1)
+#evaluate_multi_input_model_per_seq(model_path='/home/miaroe/workspace/lymph-node-classification/output/models/2024-05-10/12:13:08',
+#                         reports_path='/home/miaroe/workspace/lymph-node-classification/reports/2024-05-10/12:13:08/',
+#                         seq_length=10, stations_config_nr=3, batch_size=1)
+
+
+
+#------------------ Cross validation ------------------#
+
+def evaluate_cv(n_splits):
+    # calculate metrics for each fold and save average +- std to reports path
+    accuracy_list = []
+    precision_list = []
+    recall_list = []
+
+    for fold in range(n_splits):
+        reports_path_fold = os.path.join(reports_path, f'fold_{fold}_v2')
+
+        with open(os.path.join(reports_path_fold, 'test_metrics.txt'), 'r') as f:
+            lines = f.readlines()
+            accuracy = float(lines[5].split()[-1])
+            precision = float(lines[6].split()[-1])
+            recall = float(lines[7].split()[-1])
+
+            accuracy_list.append(accuracy)
+            precision_list.append(precision)
+            recall_list.append(recall)
+
+    # calculate average and std for each metric
+    avg_accuracy = np.mean(accuracy_list)
+    std_accuracy = np.std(accuracy_list)
+    avg_precision = np.mean(precision_list)
+    std_precision = np.std(precision_list)
+    avg_recall = np.mean(recall_list)
+    std_recall = np.std(recall_list)
+
+
+    with open(os.path.join(reports_path, 'test_metrics.txt'), 'a') as f:
+        f.write(f'\n\nAverage metrics for {n_splits} folds\n')
+        f.write(f'{"Metric":<12}{"Value"}\n')
+        f.write(f'{"Accuracy":<12}{avg_accuracy:<.4f} +- {std_accuracy:<.4f}\n')
+        f.write(f'{"Precision":<12}{avg_precision:<.4f} +- {std_precision:<.4f}\n')
+        f.write(f'{"Recall":<12}{avg_recall:<.4f} +- {std_recall:<.4f}\n')
+
+#evaluate_cv(n_splits=5)
+
+# write a function that retrieves accuracy, precision and recall from each class from sequence_report.csv from each fold and calculates average and std
+def evaluate_cv_per_class(n_splits, report_folder, name):
+    accuracy_list = []
+    precision_dict = {}
+    recall_dict = {}
+
+    for fold in range(n_splits):
+        file_path = os.path.join(report_folder, f'fold_{fold}_v2', f'{name}_report.csv')
+        df = pd.read_csv(file_path, sep='\t', index_col=0)
+        print(df)
+
+        # Extract overall accuracy
+        accuracy_list.append(df.loc['accuracy']['precision'])
+
+        for class_label in df.index[:-3]:  # Skipping 'accuracy', 'macro avg', 'weighted avg'
+            if class_label not in precision_dict:
+                precision_dict[class_label] = []
+                recall_dict[class_label] = []
+
+            precision_dict[class_label].append(df.loc[class_label]['precision'])
+            recall_dict[class_label].append(df.loc[class_label]['recall'])
+
+    # Calculate averages and stds
+    results = {
+        'accuracy': {
+            'average': np.mean(accuracy_list),
+            'std': np.std(accuracy_list)
+        }
+    }
+
+    for class_label in precision_dict:
+        results[class_label] = {
+            'precision': {
+                'average': np.mean(precision_dict[class_label]),
+                'std': np.std(precision_dict[class_label])
+            },
+            'recall': {
+                'average': np.mean(recall_dict[class_label]),
+                'std': np.std(recall_dict[class_label])
+            }
+        }
+
+    # Save results to file
+    with open(os.path.join(report_folder, f'{name}_metrics.txt'), 'w') as f:
+        f.write(f'{name} metrics\n')
+        f.write(f'{"Accuracy":<12}{results["accuracy"]["average"]:<12.4f} +- {results["accuracy"]["std"]:<12.4f}\n\n')
+        f.write(f'{"Class":<12}{"Precision":<28}{"Recall"}\n')
+        for class_label in results:
+            if class_label == 'accuracy':
+                continue
+            f.write(f'{class_label:<12}{results[class_label]["precision"]["average"]:<12.4f} +- {results[class_label]["precision"]["std"]:<12.4f}{results[class_label]["recall"]["average"]:<12.4f} +- {results[class_label]["recall"]["std"]:<12.4f}\n')
+
+
+evaluate_cv_per_class(n_splits=5, report_folder=reports_path, name='sequence_stateful')
 
 
 
 
 
-
-#------------------ Local functions ------------------#
-
-def make_frame_pred_dict(video_path, model_path, model_name):
-    model = tf.keras.models.load_model(os.path.join(model_path, model_name))
-    frame_pred_dict = {}
-
-    for image_name in os.listdir(video_path):
-        if image_name.endswith(".png"):
-            img = tf.keras.utils.load_img(os.path.join(video_path, image_name), color_mode='rgb',
-                                          target_size=(256, 256))
-            # img = tf.image.crop_to_bounding_box(img, 24, 71, 223, 150)  # Cropping the image to the region of interest
-            img = rescale_image(img)
-            img_array = tf.keras.utils.img_to_array(img)
-            img_array = tf.expand_dims(img_array, 0)
-
-            prediction = model.predict(img_array)
-            image_index = image_name.split('.')[0]
-            frame_pred_dict[image_index] = prediction
-            # print(image_name, prediction) #frame_201.png [[8.8051502e-06 9.3291172e-05 1.3058403e-01 8.6508465e-01 3.9644584e-07 1.1566924e-05 6.9905451e-05 4.1473657e-03]]
-    return frame_pred_dict
-
-def plot_misclassified_images(video_path, model_path, model_name, labels):
-    plt.style.use('ggplot')
-    misclassified_images = []
-
-    # get dictionaries with frame labels and predictions
-    frame_pred_dict = make_frame_pred_dict(video_path, model_path, model_name)
-    frame_label_dict = get_frame_label_dict_modified(video_path)
-    print('number of frames in total:', len(frame_pred_dict))
-
-    # create folder for misclassified images
-    if not os.path.exists(os.path.join(video_path, 'misclassified_images')):
-        os.makedirs(os.path.join(video_path, 'misclassified_images'))
-
-    # create dataframe of misclassified images
-    for image_name, prediction_arr in frame_pred_dict.items():
-        prediction_arr = frame_pred_dict[image_name]
-        prediction_label = labels[np.argmax(prediction_arr)]
-        label = frame_label_dict[int(image_name)]
-        if prediction_label != label:
-            misclassified_images.append({'image_name': image_name,
-                                         'label': label,
-                                         'prediction_label': prediction_label,
-                                         'prediction_value': np.round(100 * np.max(prediction_arr[0]), 2)})
-
-    df = pd.DataFrame(misclassified_images)
-    # total number of misclassified images
-    print("total number of misclassified images:", len(df))
-    # number of misclassified images per label
-    print(df.groupby(['label']).size())
-    # number of misclassified images per prediction label
-    print(df.groupby(['prediction_label']).size())
-
-    # create plot showing number of misclassified images per label
-    df.groupby(['label']).size().plot(kind='bar')
-    fig = plt.gcf()
-    fig.subplots_adjust(bottom=0.2)
-    plt.title('Number of misclassified images per label,' + ' Total: ' + str(len(df)))
-    plt.xlabel('Label')
-    plt.ylabel('Number of misclassified images')
-    plt.savefig(os.path.join(video_path, 'misclassified_images', 'number_of_misclassified_images_per_label.png'))
-    plt.clf()
-
-    # df_filtered = df.loc[df['label'] != '0']
-    # print("number of misclassified images that does not have label='0':", len(df_filtered))
-
-    # calculate average prediction value for each label and plot
-    df['prediction_value'] = df['prediction_value'].astype(float)
-    df.groupby(['label'])['prediction_value'].mean().plot(kind='bar')
-    fig = plt.gcf()
-    fig.subplots_adjust(bottom=0.2)
-    plt.title('Average prediction value per label, Total: ' + str(len(df)))
-    plt.xlabel('Label')
-    plt.ylabel('Average prediction value')
-    plt.savefig(os.path.join(video_path, 'misclassified_images', 'average_prediction_value_per_label.png'))
-    plt.clf()
-
-
-    # save misclassified images to folder, including prediction label and prediction value
-    for label in df['label'].unique():
-        print(label)
-        # create folder for each label
-        dst = os.path.join(video_path, 'misclassified_images', label)
-        if not os.path.exists(dst):
-            os.makedirs(dst)
-
-        # plot predicted labels for label
-        print('plotting predicted labels for label', label)
-        df_filtered = df.loc[df['label'] == label]
-        df_filtered.groupby(['prediction_label']).size().plot(kind='bar')
-        fig = plt.gcf()
-        fig.subplots_adjust(bottom=0.2)
-        plt.title('Number of misclassified images per predicted label for label ' + label + ', Total: ' + str(
-            len(df_filtered)))
-        plt.xlabel('Predicted label')
-        plt.ylabel('Number of misclassified images')
-        plt.savefig(os.path.join(dst, 'pred_labels_for_' + label + '.png'))
-        plt.clf()
-
-        # os.mkdir(os.path.join(video_path, 'misclassified_images', label))
-        for image_name in df.loc[df['label'] == label]['image_name']:
-            img = tf.io.read_file(os.path.join(video_path, f'{image_name}.png'))
-            img = tf.image.decode_png(img, channels=3)
-            # get prediction label from df_filtered
-            prediction_label = df.loc[df['image_name'] == image_name]['prediction_label'].values[0]
-            prediction_value = df.loc[df['image_name'] == image_name]['prediction_value'].values[0]
-            # plot image, label and prediction label
-            plt.figure()
-            plt.imshow(img)
-            plt.title(f'label: {label}, prediction_label: {prediction_label}, prediction_value: {prediction_value}')
-            plt.axis("off")
-            plt.savefig(os.path.join(video_path, 'misclassified_images', label, f'{image_name}.png'), dpi=300)
-            plt.close()
-
-
-#plot_misclassified_images(video_path=local_full_video_path, model_path=local_model_path, model_name=local_model_name, labels=list(get_stations_config(3).keys()))
-
-
-def save_dict_to_pickle(video_path):
-    frame_pred_dict = make_frame_pred_dict(video_path)
-    # save dict to file with pickle
-    with open(os.path.join(local_full_video_path, "frame_pred_dict.pickle"), "wb") as f:
-        pickle.dump(frame_pred_dict, f)
-
-
-# save_dict_to_pickle(local_full_video_path)
-
-
-def create_full_video_from_baseline_test(baseline_path):
-    # create full video from all the folders in baseline_path and a labels.csv file from the folder name (label) and the frame number
-    file_name_index = 0
-
-    labels = []
-    full_video_path = os.path.join(baseline_path, 'full_video')
-    # create full video
-    if not os.path.exists(full_video_path):
-        os.makedirs(full_video_path)
-
-    for folder in os.listdir(baseline_path):
-        print(folder)
-        if folder.endswith(".csv") or folder.endswith(".DS_Store"):
-            print(folder)
-            continue
-        for image_name in os.listdir(os.path.join(baseline_path, folder)):
-            if image_name.endswith(".png"):
-                labels.append({'old_frame_number': image_name.split('.')[0],
-                               'frame_number': file_name_index,
-                               'label': folder})
-                print(str(file_name_index) + '.png')
-                shutil.copyfile(os.path.join(baseline_path, folder, image_name),
-                                os.path.join(full_video_path, str(file_name_index) + '.png'))
-                file_name_index += 1
-
-    df = pd.DataFrame(labels)
-    print(df)
-    df.to_csv(os.path.join(full_video_path, 'labels.csv'), index=False)
-
-#create_full_video_from_baseline_test('/Users/miarodde/Documents/sintef/ebus-ai/baseline/Levanger_and_StOlavs/test')
-
-#get_average_pred_value('/home/miaroe/workspace/lymph-node-classification/reports/2024-02-12/10:00:01/test_pred_df.csv')

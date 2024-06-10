@@ -32,20 +32,21 @@ def train_model(data_path, log_path, image_shape, validation_split, test_split,
         trainer = BaselineTrainer(data_path, log_path, image_shape, validation_split, test_split,
                                   batch_size, stations_config, num_stations, loss, model_type, model_arch,
                                   instance_size, learning_rate, model_path, patience, epochs, augment, stratified_cv, use_quality_weights)
-    elif model_type == "sequence":
+    elif model_type == "sequence" or model_type == "sequence_cv":
         trainer = SequenceTrainer(data_path, log_path, image_shape, validation_split, test_split,
                                   batch_size, stations_config, num_stations, loss, model_type, model_arch,
                                   instance_size, learning_rate, model_path, patience, epochs, steps_per_epoch,
-                                  validation_steps, set_stride, augment, seq_length, stratified_cv, full_video, use_gen, use_quality_weights)
+                                  validation_steps, set_stride, augment, seq_length, full_video, use_gen, use_quality_weights)
     elif model_type == "sequence_with_segmentation":
         trainer = SequenceWithSegmentationTrainer(data_path, log_path, image_shape, validation_split, test_split,
                                   batch_size, stations_config, num_stations, loss, model_type, model_arch,
                                   instance_size, learning_rate, model_path, patience, epochs, steps_per_epoch,
-                                  validation_steps, set_stride, augment, seq_length, stratified_cv)
+                                  validation_steps, set_stride, augment, seq_length)
     else:
         raise ValueError("Model type not supported")
 
     # Perform training
+    print('data_path: ', data_path)
     trainer.train()
 
     return trainer
@@ -69,7 +70,6 @@ class Trainer:
                  patience: int,
                  epochs: int,
                  augment: bool,
-                 stratified_cv: bool
                  ):
 
         self.data_path = data_path
@@ -89,7 +89,6 @@ class Trainer:
         self.patience = patience
         self.epochs = epochs
         self.augment = augment
-        self.stratified_cv = stratified_cv
 
         self.pipeline = None
         self.model = None
@@ -107,7 +106,7 @@ class BaselineTrainer(Trainer):
                  augment, stratified_cv, use_quality_weights):
         super().__init__(data_path, log_path, image_shape, validation_split, test_split, batch_size, stations_config,
                          num_stations, loss, model_type, model_arch, instance_size, learning_rate, model_path, patience,
-                         epochs, augment, stratified_cv)
+                         epochs, augment)
 
         self.use_quality_weights = use_quality_weights
 
@@ -217,76 +216,32 @@ class BaselineTrainer(Trainer):
         return save_best, early_stop
 
     # -----------------------------  TRAINING ----------------------------------
-    # Not used at the moment, TODO: remove?
-    def train_stratified_cv(self):
-        # Stratified K-fold cross validation
-        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-        train_images = np.concatenate(list(self.train_ds.map(lambda x, y: x)))
-        train_labels = np.concatenate(list(self.train_ds.map(lambda x, y: y)))
-        train_labels = np.argmax(train_labels, axis=1)
-
-        val_images = np.concatenate(list(self.val_ds.map(lambda x, y: x)))
-        val_labels = np.concatenate(list(self.val_ds.map(lambda x, y: y)))
-        val_labels = np.argmax(val_labels, axis=1)
-
-        images = np.concatenate((train_images, val_images), axis=0)
-        labels = np.concatenate((train_labels, val_labels), axis=0)
-
-        # Iterate through folds
-        for fold, (train_idx, val_idx) in enumerate(skf.split(images, labels)):
-            print(f"Fold: {fold + 1}")
-
-            train_dataset = tf.data.Dataset.from_tensor_slices((images[train_idx], labels[train_idx]))
-            val_dataset = tf.data.Dataset.from_tensor_slices((images[val_idx], labels[val_idx]))
-
-            self.train_ds = train_dataset.shuffle(1024).batch(self.batch_size)
-            self.val_ds = val_dataset.batch(self.batch_size)
-
-            # Save best model and early stop
-            save_best, early_stop = self.save_model()
-
-            # Train model
-            self.model.fit(self.train_ds,
-                           epochs=self.epochs,
-                           validation_data=self.val_ds,
-                           callbacks=[save_best, early_stop, self.experiment_logger],
-                           class_weight=get_class_weight(self.train_ds, self.num_stations))
-
-            # Load best model and save it
-            best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
-            best_model.save(os.path.join(str(self.experiment_logger.logdir), f'best_model_{fold}'))
-
     def train(self):
         self.preprocess()
         self.build_model()
 
         print("-- TRAINING --")
-        # Train model with stratified cross validation
-        if self.stratified_cv:
-            self.train_stratified_cv()  # Allocation of 10934550528 exceeds 10% of free system memory. Might be useful for small dataset
 
-        else:
-            save_best, early_stop = self.save_model()
+        save_best, early_stop = self.save_model()
 
-            self.model.fit(self.train_ds,
-                           epochs=self.epochs,
-                           validation_data=self.val_ds,
-                           callbacks=[save_best, early_stop, self.experiment_logger],
-                           class_weight=get_class_weight(self.train_ds, self.num_stations))
+        self.model.fit(self.train_ds,
+                       epochs=self.epochs,
+                       validation_data=self.val_ds,
+                       callbacks=[save_best, early_stop, self.experiment_logger])
+                       #class_weight=get_class_weight(self.train_ds, self.num_stations))
 
-            best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
-            best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
+        best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
+        best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
 
 
 class SequenceTrainer(Trainer):
     def __init__(self, data_path, log_path, image_shape, validation_split, test_split,
                  batch_size, stations_config, num_stations, loss, model_type, model_arch,
                  instance_size, learning_rate, model_path, patience, epochs, steps_per_epoch,
-                 validation_steps, set_stride, augment, seq_length, stratified_cv, full_video, use_gen, use_quality_weights):
+                 validation_steps, set_stride, augment, seq_length, full_video, use_gen, use_quality_weights):
         super().__init__(data_path, log_path, image_shape, validation_split, test_split, batch_size, stations_config,
                          num_stations, loss, model_type, model_arch, instance_size, learning_rate, model_path, patience,
-                         epochs, augment, stratified_cv)
+                         epochs, augment)
 
         self.seq_length = seq_length
         self.set_stride = set_stride
@@ -416,7 +371,7 @@ class SequenceTrainer(Trainer):
         tb_logger = TensorBoard(log_dir=os.path.join('logs/fit/', train_config.log_directory), histogram_freq=1,
                                 update_freq="batch")
 
-        self.experiment_logger = ExperimentLogger(logdir=train_config.model_directory,
+        self.experiment_logger = ExperimentLogger(logdir=self.model_path,
                                                   train_config=train_config.get_config())
         self.experiment_logger.save_current_config()
 
@@ -460,8 +415,8 @@ class SequenceTrainer(Trainer):
             self.model.fit(self.train_ds,
                            epochs=self.epochs,
                            validation_data=self.val_ds,
-                           callbacks=[save_best, early_stop, self.experiment_logger, tb_logger],
-                           class_weight=get_class_weight(self.train_ds, self.num_stations))
+                           callbacks=[save_best, early_stop, self.experiment_logger, tb_logger])
+                           #class_weight=get_class_weight(self.train_ds, self.num_stations))
 
         best_model = tf.keras.models.load_model(self.experiment_logger.get_latest_checkpoint(), compile=False)
         best_model.save(os.path.join(str(self.experiment_logger.logdir), 'best_model'))
@@ -470,10 +425,10 @@ class SequenceTrainer(Trainer):
 class SequenceWithSegmentationTrainer(Trainer):
     def __init__(self, data_path, log_path, image_shape, validation_split, test_split, batch_size, stations_config,
                  num_stations, loss, model_type, model_arch, instance_size, learning_rate, model_path, patience, epochs,
-                 steps_per_epoch, validation_steps, set_stride, augment, seq_length, stratified_cv):
+                 steps_per_epoch, validation_steps, set_stride, augment, seq_length):
         super().__init__(data_path, log_path, image_shape, validation_split, test_split, batch_size, stations_config,
                          num_stations, loss, model_type, model_arch, instance_size, learning_rate, model_path, patience,
-                         epochs, augment, stratified_cv)
+                         epochs, augment)
 
         self.seq_length = seq_length
         self.set_stride = set_stride
@@ -516,6 +471,11 @@ class SequenceWithSegmentationTrainer(Trainer):
             print('Image :', image_input.shape)  # e.g., (batch_size, seq_length, height, width, channels)
             print('Mask :', mask_input.shape)  # e.g., (batch_size, seq_length, height, width, mask_channels)
 
+            print('image min:', tf.reduce_min(image_input))
+            print('image max:', tf.reduce_max(image_input))
+            print('mask min:', tf.reduce_min(mask_input))
+            print('mask max:', tf.reduce_max(mask_input))
+
 
             for i in range(self.batch_size):
                 c_invalid = (0, 0, 0)
@@ -528,8 +488,8 @@ class SequenceWithSegmentationTrainer(Trainer):
                 image_cmap = plt.cm.get_cmap('gray')
                 image_cmap.set_bad(color=c_invalid)
 
-                image = image_input[i][0] / 255
-                mask = mask_input[i][0] / 255
+                image = image_input[i][0] / 2 + 0.5
+                mask = mask_input[i][0]
 
                 pred = np.argmax(mask, axis=-1)
                 plt.imshow(image, cmap=image_cmap)

@@ -25,10 +25,13 @@ def plot_compare_metrics(model_paths, model_names, reports_path):
         val_loss = [entry['val_loss'] for entry in results]
         train_accuracy = [entry['accuracy'] for entry in results]
         val_accuracy = [entry['val_accuracy'] for entry in results]
-        train_precision = [entry['precision'] for entry in results]
-        val_precision = [entry['val_precision'] for entry in results]
-        train_recall = [entry['recall'] for entry in results]
-        val_recall = [entry['val_recall'] for entry in results]
+
+        # Filter out precision and recall keys in case of cv results
+        train_precision = [entry[key] for entry in results for key in entry.keys() if key.startswith('precision')]
+        val_precision = [entry[key] for entry in results for key in entry.keys() if key.startswith('val_precision')]
+        train_recall = [entry[key] for entry in results for key in entry.keys() if key.startswith('recall')]
+        val_recall = [entry[key] for entry in results for key in entry.keys() if key.startswith('val_recall')]
+
         epochs = range(1, len(train_loss) + 1)
 
         model_time = os.path.basename(model_path)

@@ -49,7 +49,7 @@ def evaluate_model(trainer, reports_path, model_path, visualize_predictions, lea
 
     model.load_weights(filepath=os.path.join(model_path, 'best_model')).expect_partial()
 
-    if trainer.model_type == 'sequence':
+    if trainer.model_type == 'sequence' or trainer.model_type == 'sequence_cv':
         if trainer.model_type == 'sequence' and trainer.use_gen:
             # create finite datasets for sequence model
             train_ds = trainer.train_ds.take(trainer.steps_per_epoch * trainer.batch_size)
@@ -131,8 +131,8 @@ def test_baseline_model(trainer, model, train_config, visualize_predictions, con
 
 
 def test_sequence_model(trainer, train_ds, val_ds, model, seq_length, train_config, conf_matrix, station_distribution, reports_path, model_path):
-    true_labels_mean, predictions_mean = get_test_pred_sequence_mean(trainer, model, seq_length, reports_path)
-    if trainer.model_type == 'sequence': true_labels, predictions = evaluate_sequence_model_per_seq(trainer, model, seq_length, reports_path, model_path)
+    true_labels_mean, predictions_mean, test_ds = get_test_pred_sequence_mean(trainer, model, seq_length, reports_path)
+    if trainer.model_type == 'sequence' or trainer.model_type == 'sequence_cv': true_labels, predictions= evaluate_sequence_model_per_seq(trainer, model, seq_length, reports_path, model_path)
     else: true_labels, predictions = get_test_pred_sequence(trainer, model, seq_length)
     if conf_matrix:
         confusion_matrix_and_report(true_labels_mean, predictions_mean, trainer.num_stations, train_config.get('stations_config'),
@@ -140,11 +140,12 @@ def test_sequence_model(trainer, train_ds, val_ds, model, seq_length, train_conf
         confusion_matrix_and_report(true_labels, predictions, trainer.num_stations,
                                     train_config.get('stations_config'),
                                     reports_path, 'sequence_')
+
     if station_distribution:
         station_distribution_figure_and_report(train_ds,
                                                val_ds,
                                                train_config.get('num_stations'),
-                                               train_config.get('stations_config'), reports_path)
+                                               train_config.get('stations_config'), reports_path, test_ds)
 
 
 # get true labels and predictions for baseline model from the tf.data.dataset test_ds
@@ -208,17 +209,24 @@ def pred_sequence(trainer, sequence, model):
 def pred_sequence_with_segementation(trainer, sequence, model):
     image_sequence, mask_sequence = trainer.pipeline.load_image_sequence_multi_input(sequence)
 
-    multi_input_seq_images = {'image_input': image_sequence, 'mask_input': mask_sequence}
-    multi_input_seq_images = {k: tf.reshape(v, (1, v.shape[0], v.shape[1], v.shape[2], v.shape[3])) for k, v in
-                                multi_input_seq_images.items()}
+    if trainer.model_arch == 'mutli-input_mobilenetV2-lstm':
+        # scale images from [0, 1] to [-1, 1]
+        image_sequence = (image_sequence - 0.5) * 2.0
+
+    multi_input_seq_images = [image_sequence, mask_sequence]
+    multi_input_seq_images = [tf.expand_dims(image, axis=0) for image in multi_input_seq_images]
+
     pred_sequence = model.predict(multi_input_seq_images)[0]
     return pred_sequence
 
 
 # get true labels and predictions for sequence model from test dataset stored in test_ds
 def get_test_pred_sequence_mean(trainer, model, seq_length, reports_path):
-    station_paths_list = get_test_station_paths(os.path.join(trainer.data_path, 'test'))
+    station_paths_list = get_test_station_paths(trainer.data_path, trainer.model_type)
     print('Number of stations in test set:', len(station_paths_list))
+
+    test_ds = tf.data.Dataset.from_tensor_slices((station_paths_list, trainer.pipeline.get_path_labels(station_paths_list)))
+    test_ds = test_ds.batch(trainer.batch_size)
 
     true_labels = []
     predictions = []
@@ -236,7 +244,7 @@ def get_test_pred_sequence_mean(trainer, model, seq_length, reports_path):
 
         for sequence in sequences:
             #pred_seq = pred_sequence(trainer, sequence, model)
-            if trainer.model_type == 'sequence': pred_seq = pred_sequence(trainer, sequence, model)
+            if trainer.model_type == 'sequence' or trainer.model_type == 'sequence_cv': pred_seq = pred_sequence(trainer, sequence, model)
             else: pred_seq = pred_sequence_with_segementation(trainer, sequence, model)
             pred_seq = pred_seq.tolist()
             # dict that stores length of sequence and prediction
@@ -267,11 +275,11 @@ def get_test_pred_sequence_mean(trainer, model, seq_length, reports_path):
     os.makedirs(reports_path, exist_ok=True)
     test_pred_df.to_csv(reports_path + 'test_pred_df.csv')
 
-    return true_labels, predictions
+    return true_labels, predictions, test_ds
 
 #only for multi input models
 def get_test_pred_sequence(trainer, model, seq_length):
-    station_paths_list = get_test_station_paths(os.path.join(trainer.data_path, 'test'))
+    station_paths_list = get_test_station_paths(trainer.data_path, trainer.model_type)
 
     true_labels = []
     predictions = []
@@ -304,7 +312,7 @@ def create_sequences_test(trainer, station_path, seq_length):
 
 # evaluate sequence model per sequence
 def evaluate_sequence_model_per_seq(trainer, model, seq_length, reports_path, model_path):
-    test_station_paths = get_test_station_paths(os.path.join(trainer.data_path, 'test'))
+    test_station_paths = get_test_station_paths(trainer.data_path, trainer.model_type)
 
     sequences_list = []
     labels_list = []
