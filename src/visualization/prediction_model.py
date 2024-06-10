@@ -11,11 +11,15 @@ def plot_predictions(model, test_ds, model_type, station_names, reports_path):
         print('images.shape: ', images.shape)
         # predictions = get_predictions(model, images)
         predictions = model.predict(images)
+
+        # print min and max of image[0]
+        print('min: ', np.min(images[0]))
+        print('max: ', np.max(images[0]))
         for i in range(6):
             ax = plt.subplot(2, 3, i + 1)
-            if model_type == 'baseline' or model_type == 'combined_baseline':
-                #image = ((images[i] + 1) / 2) * 255# denormalize image
-                image = images[i] * 255
+            if model_type == 'baseline':
+                image = ((images[i] + 1.) / 2.) * 255 # denormalize image
+                #image = images[i] * 255
             else:  # model_type == 'sequence' and has an extra dimension
                 image = images[0][i]
                 # normalize image

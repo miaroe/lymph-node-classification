@@ -7,7 +7,8 @@ config = TrainConfig(batch_size=batch_size,
                      instance_size=instance_size,
                      loss=loss,
                      seq_length=seq_length,
-                     stride=stride,
+                     set_stride=set_stride,
+                     full_video=full_video,
                      steps_per_epoch=steps_per_epoch,
                      validation_steps=validation_steps,
                      augment=augment,
@@ -21,7 +22,14 @@ config = TrainConfig(batch_size=batch_size,
                      model_directory=model_path,
                      num_epochs=epochs,
                      validation_split=validation_split,
-                     test_split=test_split)
+                     test_split=test_split,
+                     use_gen=use_gen,
+                     perform_segmentation=perform_segmentation,
+                     num_train=num_train,
+                     num_val=num_val,
+                     use_quality_weights=use_quality_weights,
+                     learning_rate=learning_rate)
+
 
 
 def set_train_config():
