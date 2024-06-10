@@ -60,11 +60,9 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         # ResNet-50, another very popular arch, can be done similarly as for InceptionV3 above
 
         base_model = ResNet50(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
-        #base_model.trainable = False
 
-        #for layer in base_model.layers[143:]:
-        #    if not isinstance(layer, BatchNormalization):
-        #        layer.trainable = True
+        for layer in base_model.layers[:143]:
+            layer.trainable = False
 
         # Make sure the correct layers are frozen
         for i, layer in enumerate(base_model.layers):
@@ -240,15 +238,16 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         # Create the base model from the pre-trained model
         base_model = MobileNetV2(include_top=False, weights="imagenet", input_shape=instance_size, pooling=None)
 
-        for layer in base_model.layers[:-11]:
-            layer.trainable = False
+        #for layer in base_model.layers[:-11]:
+        #    layer.trainable = False
 
         # Make sure the correct layers are frozen
         for i, layer in enumerate(base_model.layers):
             print(i, layer.name, layer.trainable)
 
         # Create the input layer for the sequence of images
-        sequence_input = Input(shape=(None, *instance_size))  # (B, T, H, W, C)
+        if stateful: sequence_input = Input(shape=(None, *instance_size), batch_size=1)  # (B, T, H, W, C)
+        else: sequence_input = Input(shape=(None, *instance_size))
 
         # Apply the CNN base model to each image in the sequence
         x = TimeDistributed(base_model)(sequence_input)  # (B, T, H', W', C')
@@ -257,13 +256,13 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         x = TimeDistributed(tf.keras.layers.GlobalMaxPooling2D())(x)  # (B, T, C')
 
         # Create an LSTM layer
-        x = LSTM(64, return_sequences=True, stateful=stateful)(x)  # (B, T, lstm_output_dim)
+        x = LSTM(32, return_sequences=True, stateful=stateful)(x)  # (B, T, lstm_output_dim)
 
-        x = LSTM(64, return_sequences=False, stateful=stateful)(x)  # (B, lstm_output_dim)
+        x = LSTM(32, return_sequences=False, stateful=stateful)(x)  # (B, lstm_output_dim)
 
         # Create a dense layer
         #x = Dense(32, kernel_regularizer=regularizers.l2(0.001), activation='relu')(x)  # (B, dense_output_dim)
-        x = Dense(256, activation='relu')(x)  # (B, dense_output_dim)
+        x = Dense(32, activation='relu')(x)  # (B, dense_output_dim)
 
         # Create a dropout layer
         x = Dropout(0.5)(x)  # (B, dense_output_dim)
@@ -282,12 +281,13 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         for i, layer in enumerate(base_model.layers):
             print(i, layer.name, layer.trainable)
 
-        sequence_input = Input(shape=(None, *instance_size))  # (B, T, H, W, C)
+        if stateful: sequence_input = Input(shape=(None, *instance_size), batch_size=1)  # (B, T, H, W, C)
+        else: sequence_input = Input(shape=(None, *instance_size))
         x = TimeDistributed(base_model)(sequence_input)  # (B, T, H', W', C')
         x = TimeDistributed(tf.keras.layers.GlobalMaxPooling2D())(x)  # (B, T, C')
-        x = LSTM(64, return_sequences=True, stateful=stateful)(x)  # (B, T, lstm_output_dim)
-        x = LSTM(64, return_sequences=False, stateful=stateful)(x)  # (B, lstm_output_dim)
-        x = Dense(256, activation='relu')(x)  # (B, dense_output_dim)
+        x = LSTM(32, return_sequences=True, stateful=stateful)(x)  # (B, T, lstm_output_dim)
+        x = LSTM(32, return_sequences=False, stateful=stateful)(x)  # (B, lstm_output_dim)
+        x = Dense(32, activation='relu')(x)  # (B, dense_output_dim)
         x = Dropout(0.5)(x)  # (B, dense_output_dim)
         output = Dense(num_stations, activation='softmax')(x)  # (B, num_classes)
         model = Model(inputs=sequence_input, outputs=output)
@@ -299,7 +299,8 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         for i, layer in enumerate(base_model.layers):
             print(i, layer.name, layer.trainable)
 
-        sequence_input = Input(shape=(None, *instance_size))  # (B, T, H, W, C)
+        if stateful: sequence_input = Input(shape=(None, *instance_size), batch_size=1)  # (B, T, H, W, C)
+        else: sequence_input = Input(shape=(None, *instance_size))
         x = TimeDistributed(base_model)(sequence_input)  # (B, T, H', W', C')
         x = TimeDistributed(tf.keras.layers.GlobalMaxPooling2D())(x)  # (B, T, C')
         x = LSTM(128, return_sequences=True, stateful=stateful)(x)  # (B, T, lstm_output_dim)
@@ -311,17 +312,16 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
 
     elif model_arch == 'resnet-lstm':
         base_model = ResNet50(include_top=False, weights="imagenet", pooling=None, input_shape=instance_size)
-        base_model.trainable = False
 
-        for layer in base_model.layers[143:]:
-            if not isinstance(layer, BatchNormalization):
-                layer.trainable = True
+        #for layer in base_model.layers[:143]:
+        #    layer.trainable = False
 
         # Make sure the correct layers are frozen
         for i, layer in enumerate(base_model.layers):
             print(i, layer.name, layer.trainable)
 
-        sequence_input = Input(shape=(None, *instance_size))  # (B, T, H, W, C)
+        if stateful: sequence_input = Input(shape=(None, *instance_size), batch_size=1)  # (B, T, H, W, C)
+        else: sequence_input = Input(shape=(None, *instance_size))
         x = TimeDistributed(base_model)(sequence_input)  # (B, T, H', W', C')
         x = TimeDistributed(tf.keras.layers.GlobalMaxPooling2D())(x)  # (B, T, C')
         x = LSTM(128, return_sequences=True, stateful=stateful)(x)  # (B, T, lstm_output_dim)
@@ -344,15 +344,13 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         image_input = Input(shape=(None, *instance_size), name='image_input')  # Sequence of images
         mask_input = Input(shape=(None, *instance_size), name='mask_input')  # Sequence of segmentation masks
 
-        # Image processing pathway
-        # Here, we're using a TimeDistributed wrapper to apply a model to each time step independently
         #image_model = tf.keras.applications.MobileNetV3Small(input_shape=instance_size, include_top=False, weights='imagenet',
         #                                                    include_preprocessing=True, minimalistic=True, dropout_rate=0.3)
 
         image_model = MobileNetV2(include_top=False, weights="imagenet", input_shape=instance_size, pooling=None)
 
-        for layer in image_model.layers[:-11]:
-            layer.trainable = False
+        #for layer in image_model.layers[:-11]:
+        #    layer.trainable = False
 
         image_features = TimeDistributed(image_model)(image_input)
         image_features = TimeDistributed(GlobalAveragePooling2D())(image_features)
@@ -367,12 +365,12 @@ def get_arch(model_arch, instance_size, num_stations, stateful=False):
         combined_features = Concatenate()([image_features, mask_features])
 
         # Create an LSTM layer
-        lstm_1 = LSTM(64, return_sequences=True, stateful=stateful)(combined_features)  # (B, T, lstm_output_dim)
+        lstm_1 = LSTM(32, return_sequences=True, stateful=stateful)(combined_features)  # (B, T, lstm_output_dim)
 
-        lstm_2 = LSTM(64, return_sequences=False, stateful=stateful)(lstm_1)  # (B, lstm_output_dim)
+        lstm_2 = LSTM(32, return_sequences=False, stateful=stateful)(lstm_1)  # (B, lstm_output_dim)
 
         # Create a dense layer
-        dense = Dense(256, activation='relu')(lstm_2)  # (B, dense_output_dim)
+        dense = Dense(32, activation='relu')(lstm_2)  # (B, dense_output_dim)
 
         # Create a dropout layer
         dropout = Dropout(0.5)(dense)  # (B, dense_output_dim)
